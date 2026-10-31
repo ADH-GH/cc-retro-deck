@@ -1,0 +1,50 @@
+{
+  "name": "cc-retro-deck-linux",
+  "version": "0.12.0",
+  "description": "Linux edition: C64/Amiga-styled figures in the prompt footer, a deck of every running Claude session (tab id, state, topic) with jumps between the windows of the C64 tmux frame, a dancing crab, and an opt-in auto-switch to the window that needs you.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "theme": {
+      "type": "string",
+      "description": "Color palette: c64 (all 16 VIC-II colors, light blue ground), amiga (Workbench 1.3) or cga (IBM 16 colors)",
+      "options": [
+        "c64",
+        "amiga",
+        "cga"
+      ],
+      "default": "c64",
+      "title": "Theme"
+    },
+    "autoSwitch": {
+      "type": "boolean",
+      "description": "Bring this session's frame window to the front when it needs you, but only while the window you are looking at is busy working",
+      "default": false,
+      "title": "Auto-switch to the tab that needs you"
+    },
+    "autoOpen": {
+      "type": "boolean",
+      "description": "Open the deck pane when the session starts (seats only from 144 columns; /deck opens it at any width)",
+      "default": true,
+      "title": "Open the deck at session start"
+    },
+    "banner": {
+      "type": "boolean",
+      "title": "Brand banner at session start",
+      "description": "Show the retro boot banner above the prompt for the first seconds of a session",
+      "default": true
+    },
+    "crab": {
+      "type": "boolean",
+      "title": "Dancing crab at session start",
+      "description": "Let the Claude Code crab, at its own size, walk and dance across the band for the first seconds of a session",
+      "default": true
+    },
+    "introEvery": {
+      "type": "number",
+      "title": "Crab comes back every (seconds)",
+      "description": "Replay the crab and banner intro every so many seconds while nothing waits for you; 0 turns the replay off",
+      "default": 60
+    }
+  },
+  "license": "MIT"
+}

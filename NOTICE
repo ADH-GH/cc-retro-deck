@@ -1,0 +1,15 @@
+Claude Code Retro Deck — third-party notice
+
+Star Trek tribute
+
+The boot screen (shell/trek.py in each edition) is a tribute to Sir Patrick Stewart
+(1940-2026). It is unofficial fan art: the starship is drawn from scratch in code, no
+images, footage, music or other material from Star Trek are included.
+
+Star Trek and related names, ships and quotes are trademarks and copyrights of
+CBS Studios Inc. / Paramount. This tribute is unofficial and non-commercial and is not
+affiliated with or endorsed by them. The MIT license covers this project's code only and
+grants no rights in third-party marks or designs.
+
+Commodore 64 and related names are trademarks of their respective owners. This project
+is not affiliated with or endorsed by Anthropic.

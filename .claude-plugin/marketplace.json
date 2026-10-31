@@ -1,0 +1,17 @@
+{
+  "name": "cc-retro-deck",
+  "description": "Claude Code Retro Deck: a Commodore 64 look for Claude Code, one plugin per operating system",
+  "owner": { "name": "ADH-GH" },
+  "plugins": [
+    {
+      "name": "cc-retro-deck-mac",
+      "source": "./mac",
+      "description": "macOS (Terminal.app): C64 footer, session deck with tab jumps, LOAD \"*\",8,1 with boot screen and tmux frame"
+    },
+    {
+      "name": "cc-retro-deck-linux",
+      "source": "./linux",
+      "description": "Linux (GNOME Terminal, Mint 22): C64 footer, session deck, LOAD \"*\",8,1 with all sessions as windows of one tmux frame"
+    }
+  ]
+}

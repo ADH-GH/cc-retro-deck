@@ -1,0 +1,20 @@
+# Changelog
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
+version number.
+
+## [0.12.0] — unreleased
+
+First public release.
+
+### Added
+- `cc-retro-deck-mac` (macOS, Terminal.app) and `cc-retro-deck-linux` (Linux, GNOME Terminal).
+- Two ways to start: `claude` (standard, with C64 footer and task deck) or `LOAD "*",8,1`
+  (Retro Deck: C64 profile, boot screen, tmux frame with crab header and banner).
+- `/deck setup` and `/deck uninstall`: set up and remove everything outside the plugin
+  (shell line, Terminal profiles, runtime data), each showing its changes before `apply`.
+- Star Trek tribute: on `LOAD "*",8,1` the boot screen shows an Enterprise-D drawn in VIC-II
+  colors, loading into 24-bit color and going to warp. Unofficial fan art (see NOTICE).
+- Sessions started by `LOAD` use the theme `dark-ansi` for that session only; a plain `claude`
+  keeps your own theme.
+- The footer shows only the limit windows your plan reports (`5h`, `7d`, `$`).
