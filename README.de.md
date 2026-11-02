@@ -15,7 +15,7 @@ eine Verbindung oder Empfehlung ist damit nicht gemeint.*
 |---|---|---|
 | macOS | `cc-retro-deck-mac` | Terminal.app |
 | Linux (Zielsystem: Mint 22) | `cc-retro-deck-linux` | GNOME Terminal |
-| Windows | folgt | |
+| Windows (Beta) | `cc-retro-deck-windows`, vom Branch: `claude plugin marketplace add ADH-GH/cc-retro-deck#windows-beta` | Windows Terminal |
 
 Genau eine installieren, die für das eigene System. Claude Code kann sie nicht selbst wählen.
 

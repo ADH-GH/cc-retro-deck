@@ -1,0 +1,39 @@
+{
+  "schemes": [
+    {
+      "name": "C64",
+      "background": "#2E2C9B",
+      "foreground": "#706DEB",
+      "cursorColor": "#706DEB",
+      "selectionBackground": "#706DEB",
+      "black": "#000000",
+      "red": "#813338",
+      "green": "#56AC4D",
+      "yellow": "#EDF171",
+      "blue": "#706DEB",
+      "purple": "#8E3C97",
+      "cyan": "#75CEC8",
+      "white": "#B2B2B2",
+      "brightBlack": "#2E2C9B",
+      "brightRed": "#C46C71",
+      "brightGreen": "#A9FF9F",
+      "brightYellow": "#EDF171",
+      "brightBlue": "#706DEB",
+      "brightPurple": "#8E3C97",
+      "brightCyan": "#75CEC8",
+      "brightWhite": "#FFFFFF"
+    }
+  ],
+  "profiles": [
+    {
+      "guid": "{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de1}",
+      "name": "C64 Retro Deck",
+      "commandline": "powershell.exe -NoLogo -NoExit -ExecutionPolicy Bypass -Command \". (Join-Path $HOME '.claude\\retro-deck\\shell\\load.ps1'); LOAD '*,8,1'\"",
+      "colorScheme": "C64",
+      "font": {
+        "face": "Cascadia Mono"
+      },
+      "cursorShape": "filledBox"
+    }
+  ]
+}
