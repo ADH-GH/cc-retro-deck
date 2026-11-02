@@ -1087,7 +1087,7 @@ async function deckCommand($: EngineInterface, args: string): Promise<{ text: st
     const ok = await jumpTo($, row.tty)
     return { text: ok ? `Jumped to ${row.project} (${row.tty}).` : noTab(row.tty) }
   }
-  if (verb === 'setup') return { text: await setupCommand($, home, arg === 'apply') }
+  if (verb === 'setup') return { text: await setupCommand($, home, arg === 'apply', /\bpolicy\b/.test(args)) }
   if (verb === 'uninstall') {
     const text = await uninstallCommand($, home, arg === 'apply')
     if (arg === 'apply') uninstalled = true

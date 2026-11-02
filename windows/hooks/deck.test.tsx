@@ -20,7 +20,10 @@ function verbOf(argv: readonly string[]): string {
 // What stands for the engine beneath the mod: the session's figures and the
 // host calls (files, processes) the kit does not answer by itself.
 function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[]) => string | null = () => '', files: Record<string, string> = {}) {
-  mock.env(on, { USERPROFILE: HOME.replace(/\//g, '\\'), LOCALAPPDATA: LOCAL.replace(/\//g, '\\'), WT_SESSION: 'wt-test' })
+  mock.env(on, {
+    USERPROFILE: HOME.replace(/\//g, '\\'), LOCALAPPDATA: LOCAL.replace(/\//g, '\\'), WT_SESSION: 'wt-test',
+    PATH: `C:\\Windows\\system32;${HOME.replace(/\//g, '\\')}\\.local\\bin`,
+  })
   mock.store(on)
   on('session.start', () => ({ cwd: ROOT }))
   on('session.id', () => ({ value: 'sid-test' }))
@@ -39,8 +42,8 @@ function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[
     value: Object.keys(files).filter(f => f.startsWith(`${e.path}/`)).map(f => ({ name: f.slice(e.path.length + 1), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })),
   }))
   on('fs.read', ($, e) => {
-    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.0-beta.1"}' }
-    if (e.path.includes('/shell/') && !e.path.startsWith(HOME)) return { value: `# ${e.path}` }
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.0-beta.2"}' }
+    if (e.path.includes('/shell/') && !e.path.startsWith(HOME)) return { value: `rem cc-retro-deck-windows ${e.path}` }
     if (e.path.endsWith('/terminal/c64-fragment.json')) return { value: '{"profiles":[]}' }
     if (!(e.path in files)) throw new Error(`ENOENT: ${e.path}`)
     return { value: files[e.path] }
@@ -145,9 +148,9 @@ test('the deck lists living sessions by the PowerShell tab they run in, and a ro
   expect(await pane.find({ type: 'Text', text: /044-gone/ })).toBeUndefined()
   await pane.unmount()
 
-  const rows = ['002', '001']
-  let jumped = await $.command.run(deckRun(`jump ${rows[0]}`))
-  if (!/043-other/.test(jumped.text)) jumped = await $.command.run(deckRun(`jump ${rows[1]}`))
+  // Both rows are idle at the same age, so which one is 001 is open: try both.
+  let jumped = await $.command.run(deckRun('jump 002'))
+  if (!/043-other/.test(jumped.text ?? '')) jumped = await $.command.run(deckRun('jump 001'))
   expect(jumped.text).toMatch(/Jumped to 043-other \(wt:4200\)/)
   expect(calls.some(argv => verbOf(argv) === 'jump' && argv[argv.length - 1] === '4200')).toBe(true)
 })
@@ -192,16 +195,21 @@ test('encodeCommand is UTF-16LE base64, as -EncodedCommand reads it', async () =
   expect(encodeCommand("LOAD '*,8,1'")).toBe('TABPAEEARAAgACcAKgAsADgALAAxACcA')
 })
 
-test('/deck setup shows its plan first, apply adds the block to each PowerShell profile and the fragment, uninstall takes them out', QUIET, async ($, on) => {
+test('/deck setup: LOAD.cmd for cmd, the block where a policy runs it, no new profile where it cannot, uninstall takes all back', QUIET, async ($, on) => {
   const ps5 = `${HOME}/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`
   const ps7 = `${HOME}/OneDrive/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`
+  const bin = `${HOME}/.local/bin`
   const files: Record<string, string> = { [ps5]: 'Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n' }
+  const calls: string[][] = []
+  let policy5 = 'Restricted'
   mock.clock(on)
   engine(on, [], argv => {
-    if (argv[0] === 'powershell.exe' && argv.includes('$PROFILE.CurrentUserCurrentHost')) return ps5.replace(/\//g, '\\') + '\r\n'
-    if (argv[0] === 'pwsh.exe' && argv.includes('$PROFILE.CurrentUserCurrentHost')) return ps7.replace(/\//g, '\\') + '\r\n'
-    if (verbOf(argv) === 'policy') return 'Undefined\r\nRestricted\r\n'
-    if (argv[0] === 'py') return '3.12.4\n'
+    calls.push([...argv])
+    const asks = argv.some(a => a.startsWith('$PROFILE.CurrentUserCurrentHost'))
+    if (argv[0] === 'powershell.exe' && asks) return `${ps5.replace(/\//g, '\\')}\r\n${policy5}\r\n`
+    if (argv[0] === 'pwsh.exe' && asks) return `${ps7.replace(/\//g, '\\')}\r\nRemoteSigned\r\n`
+    if (argv[0] === 'powershell.exe' && argv.some(a => a.startsWith('Set-ExecutionPolicy'))) { policy5 = 'RemoteSigned'; return '' }
+    if (argv[0] === 'py') return '3.13.3\n'
     if (verbOf(argv) === 'rm') { for (const p of argv.slice(argv.indexOf('rm') + 1)) for (const f of Object.keys(files)) if (f === p || f.startsWith(`${p}/`)) delete files[f]; return '' }
     return ''
   }, files)
@@ -209,20 +217,21 @@ test('/deck setup shows its plan first, apply adds the block to each PowerShell 
 
   const plan = await $.command.run(deckRun('setup'))
   expect(plan.text).toMatch(/nothing changed/)
+  expect(plan.text).toMatch(/LOAD\.cmd and SYS\.cmd in .*\.local\/bin/)
+  expect(plan.text).toMatch(/inert under the policy "Restricted"/)
   expect(plan.text).toMatch(/line 2 loads another copy/)
-  expect(plan.text).toMatch(/Set-ExecutionPolicy -Scope CurrentUser RemoteSigned/)
-  expect(plan.text).toMatch(/Python found \(py -3 3\.12\.4\)/)
+  expect(plan.text).toMatch(/optional: \/deck setup apply policy/)
   expect(files[ps5]).toBe('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n')
 
   const done = await $.command.run(deckRun('setup apply'))
   expect(done.text).toMatch(/set up/)
-  const rc5 = files[ps5] ?? ''
-  expect(rc5.startsWith('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n\r\n# >>> cc-retro-deck >>>\r\n')).toBe(true)
-  expect(rc5).toContain(". $c64Load }")
+  expect(files[`${bin}/LOAD.cmd`]).toContain('cc-retro-deck-windows')
+  expect(files[`${bin}/SYS.cmd`]).toContain('cc-retro-deck-windows')
+  expect((files[ps5] ?? '').startsWith('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n\r\n# >>> cc-retro-deck >>>\r\n')).toBe(true)
   expect(files[ps7]).toContain('# >>> cc-retro-deck >>>\n')
   expect(files[`${LOCAL}/Microsoft/Windows Terminal/Fragments/cc-retro-deck/c64.json`]).toBe('{"profiles":[]}')
-  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.0-beta.1')
-  expect(files[`${HOME}/.claude/retro-deck/shell/load.ps1`]).toBeDefined()
+  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.0-beta.2')
+  expect(calls.some(argv => argv.some(a => a.startsWith('Set-ExecutionPolicy')))).toBe(false)   // never on its own
 
   await $.command.run(deckRun('setup apply'))                 // twice: still one block
   expect((files[ps5] ?? '').split('# >>> cc-retro-deck >>>').length).toBe(2)
@@ -230,7 +239,31 @@ test('/deck setup shows its plan first, apply adds the block to each PowerShell 
   const gone = await $.command.run(deckRun('uninstall apply'))
   expect(gone.text).toMatch(/claude plugin uninstall cc-retro-deck-windows@cc-retro-deck/)
   expect(files[ps5]).toBe('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n')
-  expect(files[ps7]).toBe('')
+  expect(files[ps7]).toBeUndefined()                         // only our block in it: the file goes
+  expect(files[`${bin}/LOAD.cmd`]).toBeUndefined()
+  expect(files[`${bin}/SYS.cmd`]).toBeUndefined()
   expect(files[`${LOCAL}/Microsoft/Windows Terminal/Fragments/cc-retro-deck/c64.json`]).toBeUndefined()
-  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBeUndefined()
+})
+
+test('/deck setup creates no profile a Restricted policy would refuse, and "apply policy" opens it on request', QUIET, async ($, on) => {
+  const ps5 = `${HOME}/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`
+  const files: Record<string, string> = {}
+  let policy5 = 'Restricted'
+  mock.clock(on)
+  engine(on, [], argv => {
+    const asks = argv.some(a => a.startsWith('$PROFILE.CurrentUserCurrentHost'))
+    if (argv[0] === 'powershell.exe' && asks) return `${ps5.replace(/\//g, '\\')}\r\n${policy5}\r\n`
+    if (argv[0] === 'pwsh.exe') return null
+    if (argv[0] === 'powershell.exe' && argv.some(a => a.startsWith('Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'))) { policy5 = 'RemoteSigned'; return '' }
+    return ''
+  }, files)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+
+  const first = await $.command.run(deckRun('setup apply'))
+  expect(first.text).toMatch(/no profile created \(policy "Restricted"\)/)
+  expect(files[ps5]).toBeUndefined()
+
+  const opened = await $.command.run(deckRun('setup apply policy'))
+  expect(opened.text).toMatch(/execution policy for this user set to RemoteSigned/)
+  expect(files[ps5]).toContain('# >>> cc-retro-deck >>>')
 })

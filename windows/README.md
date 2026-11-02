@@ -23,17 +23,20 @@ claude plugin install cc-retro-deck-windows@cc-retro-deck
 ```
 
 Then, in a Claude session: `/deck setup` shows what it would change, `/deck setup apply` does it:
-the shell scripts go to `~\.claude\retro-deck\shell\`, a marked block goes into your PowerShell
-profile (Windows PowerShell and PowerShell 7), and Windows Terminal gets a profile
-"C64 Retro Deck" as a fragment (your `settings.json` is not touched).
+the shell scripts go to `~\.claude\retro-deck\shell\`, `LOAD.cmd` and `SYS.cmd` go to
+`~\.local\bin` (where Claude Code's installer puts `claude.exe`, so they are on the PATH), a marked
+block goes into your PowerShell profiles, and Windows Terminal gets a profile "C64 Retro Deck"
+as a fragment (your `settings.json` is not touched).
 
-Open a new tab and type `LOAD "*",8,1`, or open the profile "C64 Retro Deck". The tab turns C64
-blue, shows the boot screen (Python needed: `winget install Python.Python.3.12`) and starts
-Claude Code. `RUN` starts plain claude, `SYS 64738` resets the tab's colors.
+Open a new tab, **cmd or PowerShell**, and type `LOAD "*",8,1`, or open the profile
+"C64 Retro Deck". The tab turns C64 blue, shows the boot screen (Python needed:
+`winget install Python.Python.3.12`) and starts Claude Code. `SYS 64738` resets the tab's colors.
 
-Windows PowerShell runs no profile under the default policy "Restricted". `/deck setup` says so;
-run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use PowerShell 7 or the
-"C64 Retro Deck" profile, which loads the script directly.
+In cmd, and in a Windows PowerShell whose execution policy is "Restricted" (the Windows default),
+`LOAD` is `LOAD.cmd`: it runs the C64 part in a PowerShell that may run just that one script, and
+when Claude Code ends you are back where you started. Nothing changes the policy unless you ask:
+`/deck setup apply policy` sets `RemoteSigned` for your user, after which the PowerShell profile
+defines `LOAD` itself.
 
 ## How the jump finds a tab
 

@@ -11,7 +11,6 @@
 #   zoom <+|->            Schrift des vorderen Tabs (Strg+= / Strg+-): ok
 #   head <datei> <bytes>  die ersten Bytes einer Datei als UTF-8-Text
 #   rm <pfad>...          Dateien oder Ordner loeschen
-#   policy                Ausfuehrungsrichtlinie fuer den aktuellen Benutzer
 #   doctor                Bericht fuer die Abnahme (/deck doctor)
 #
 # Reines ASCII: Windows PowerShell 5.1 liest Dateien ohne BOM als ANSI.
@@ -120,8 +119,9 @@ function Get-Doctor {
   Line 'windows' ([Environment]::OSVersion.VersionString)
   try { Line 'release' ((Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').DisplayVersion) } catch {}
   Line 'helper-powershell' "$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
-  Line 'policy-currentuser' (Get-ExecutionPolicy -Scope CurrentUser)
-  Line 'policy-effective' (Get-ExecutionPolicy)
+  # Ohne die Prozess-Ebene: dieses Skript selbst laeuft mit Bypass, das sagt nichts ueber die Shells.
+  $pol = Get-ExecutionPolicy -List | Where-Object { $_.Scope -ne 'Process' } | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }
+  Line 'policy-windowsps' ($pol -join ' ')
   try {
     $wt = Get-AppxPackage -Name 'Microsoft.WindowsTerminal*' | Select-Object -First 1
     Line 'windows-terminal' $(if ($wt) { "$($wt.Name) $($wt.Version)" } else { 'not found as an app package' })
@@ -152,7 +152,6 @@ switch ($Verb) {
   'zoom'   { Invoke-Zoom ($Rest | Select-Object -First 1) }
   'head'   { Get-Head $Rest[0] ([int]$Rest[1]) }
   'rm'     { foreach ($p in $Rest) { if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force } } }
-  'policy' { Get-ExecutionPolicy -Scope CurrentUser; Get-ExecutionPolicy }
   'doctor' { Get-Doctor }
   default  { Write-Error "unknown verb: $Verb"; exit 2 }
 }

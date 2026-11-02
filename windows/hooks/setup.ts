@@ -7,15 +7,18 @@
 //
 // Windows edition. The macOS and Linux editions have their own copy of this file (ADR 0003).
 // Outside the plugin it touches: the PowerShell profiles (Windows PowerShell 5.1 and, when
-// installed, PowerShell 7), a Windows Terminal fragment with the "C64 Retro Deck" profile, and
-// ~/.claude/retro-deck/. settings.json of Windows Terminal stays as it is.
+// installed, PowerShell 7), LOAD.cmd and SYS.cmd in ~/.local/bin (where Claude Code's installer
+// puts claude.exe, so it is on the PATH) for cmd and for a PowerShell whose policy runs no
+// profile, a Windows Terminal fragment with the "C64 Retro Deck" profile, and
+// ~/.claude/retro-deck/. settings.json of Windows Terminal stays as it is. The execution policy
+// changes only with `/deck setup apply policy`, never on its own.
 import type { EngineInterface } from 'claude-code'
 
 import { exe, ps, slashes, win } from './win'
 
 const EDITION = {
   loader: 'load.ps1',
-  files: ['load.ps1', 'boot.py', 'trek.py', 'c64-settings.json'],
+  files: ['load.ps1', 'boot.py', 'trek.py', 'c64-settings.json', 'LOAD.cmd', 'SYS.cmd'],
   plugin: 'cc-retro-deck-windows@cc-retro-deck',
 }
 const BEGIN = '# >>> cc-retro-deck >>>'
@@ -31,6 +34,8 @@ const SHELLS = [
   { exe: 'pwsh.exe', name: 'PowerShell 7' },
 ]
 const OPEN_POLICY = 'Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'
+const CMD_FILES = ['LOAD.cmd', 'SYS.cmd']
+const CMD_MARK = 'cc-retro-deck-windows'       // the line in LOAD.cmd and SYS.cmd that says they are ours
 
 function shellDir(home: string): string { return `${home}/.claude/retro-deck/shell` }
 function fragmentDir(localAppData: string): string { return `${localAppData}/Microsoft/Windows Terminal/Fragments/cc-retro-deck` }
@@ -58,20 +63,63 @@ function splitRc(text: string): { rest: string; hasBlock: boolean; strays: numbe
   return { rest: out.join(eol).replace(/(\r?\n)+$/, ''), hasBlock, strays, eol }
 }
 
-type Profile = { name: string; path: string; text: string; isReadable: boolean }
+type Profile = {
+  name: string; exe: string; path: string; text: string; exists: boolean; isReadable: boolean
+  /** The policy this PowerShell runs a profile under; Restricted and AllSigned run none of ours. */
+  policy: string; isBlocked: boolean
+}
 
-/** Each installed PowerShell's own profile file, as that PowerShell names it (Documents may be on OneDrive). */
+/**
+ * Each installed PowerShell's own profile file, as that PowerShell names it (Documents may be on
+ * OneDrive), and its effective execution policy. Asked without -ExecutionPolicy: with Bypass on
+ * the command line every policy reads as Bypass (beta.1 said nothing on a Restricted machine).
+ */
 async function profiles($: EngineInterface): Promise<Profile[]> {
   const out: Profile[] = []
   for (const sh of SHELLS) {
-    const ran = await exe($, [sh.exe, '-NoProfile', '-NonInteractive', '-Command', '$PROFILE.CurrentUserCurrentHost'], 20000)
+    const ran = await exe($, [sh.exe, '-NoProfile', '-NonInteractive', '-Command', '$PROFILE.CurrentUserCurrentHost; Get-ExecutionPolicy'], 20000)
     if (!ran.ok || ran.out === '') continue                 // pwsh.exe not installed
-    const path = slashes(ran.out.split('\n')[0]!.trim())
+    const [first, second] = ran.out.split('\n').map(l => l.trim())
+    const path = slashes(first ?? '')
+    if (path === '') continue
+    const policy = second ?? ''
     const text = await $.fs.read(path).catch(() => null)
     // A profile saved as ANSI (umlauts in cp1252) reads back with U+FFFD; writing it would break them.
-    out.push({ name: sh.name, path, text: text ?? '', isReadable: text === null || !text.includes('�') })
+    out.push({
+      name: sh.name, exe: sh.exe, path, text: text ?? '', exists: text !== null,
+      isReadable: text === null || !text.includes('�'),
+      policy, isBlocked: /^(Restricted|AllSigned)$/i.test(policy),
+    })
   }
   return out
+}
+
+/** What to do with one profile: write the block, or skip it (not UTF-8, or a new file its policy would refuse). */
+function profileAction(p: Profile): 'write' | 'skip-blocked' | 'skip-ansi' {
+  if (!p.isReadable) return 'skip-ansi'
+  // A new profile under a policy that runs none would greet every new tab with a red error.
+  if (p.isBlocked && !p.exists) return 'skip-blocked'
+  return 'write'
+}
+
+/** ~/.local/bin when it is on the PATH (Claude Code's own installer puts claude.exe there), else ''. */
+async function cmdDir($: EngineInterface, home: string): Promise<string> {
+  const dir = `${home}/.local/bin`
+  const path = slashes((await $.env.get('PATH')) ?? '').toLowerCase().split(';').map(p => p.replace(/\/+$/, ''))
+  return path.includes(dir.toLowerCase()) ? dir : ''
+}
+
+/** Which of LOAD.cmd and SYS.cmd in `bin` are ours; a file of the same name without the mark is someone else's. */
+async function cmdState($: EngineInterface, bin: string): Promise<{ ours: string[]; foreign: string[] }> {
+  const ours: string[] = []
+  const foreign: string[] = []
+  if (bin === '') return { ours, foreign }
+  for (const f of CMD_FILES) {
+    const text = await $.fs.read(`${bin}/${f}`).catch(() => null)
+    if (text === null) continue
+    ;(text.includes(CMD_MARK) ? ours : foreign).push(f)
+  }
+  return { ours, foreign }
 }
 
 async function python($: EngineInterface): Promise<string> {
@@ -100,13 +148,13 @@ async function copyShell($: EngineInterface, home: string, version: string): Pro
   } catch { return false }
 }
 
-export async function setupCommand($: EngineInterface, home: string, apply: boolean): Promise<string> {
+export async function setupCommand($: EngineInterface, home: string, apply: boolean, openPolicy = false): Promise<string> {
   const version = await pluginVersion($)
   const localAppData = slashes((await $.env.get('LOCALAPPDATA')) ?? '')
   const stamp = await $.fs.read(`${shellDir(home)}/.version`).catch(() => null)
-  const found = await profiles($)
-  const policy = (await win($, 'policy')).out.split('\n').map(s => s.trim())
-  const effective = policy[1] ?? ''
+  let found = await profiles($)
+  const bin = await cmdDir($, home)
+  const cmds = await cmdState($, bin)
   const py = await python($)
   const fragment = localAppData === '' ? null : `${fragmentDir(localAppData)}/c64.json`
   const hasFragment = fragment !== null && (await $.fs.exists(fragment).catch(() => false))
@@ -114,16 +162,22 @@ export async function setupCommand($: EngineInterface, home: string, apply: bool
   const plan: string[] = []
   plan.push(`${stamp?.trim() === version ? '✓' : '→'} shell scripts in ~/.claude/retro-deck/shell/ (version ${version || '?'})`)
   if (found.length === 0) plan.push('! no PowerShell answered: LOAD cannot be set up')
+  if (bin === '') plan.push('! ~/.local/bin is not on the PATH: no LOAD in cmd, and in Windows PowerShell only through its profile')
+  else plan.push(`${cmds.ours.length === CMD_FILES.length ? '✓' : '→'} LOAD.cmd and SYS.cmd in ${bin} — LOAD "*",8,1 in cmd, and in any PowerShell, whatever its policy`)
+  for (const f of cmds.foreign) plan.push(`! ${bin}/${f} exists and is not ours; left alone`)
   for (const p of found) {
     const rc = splitRc(p.text)
-    if (!p.isReadable) plan.push(`! ${p.name} profile ${p.path} is not UTF-8; left alone — add the line from the README by hand`)
-    else plan.push(`${rc.hasBlock ? '✓' : '→'} block in the ${p.name} profile ${p.path}, defines LOAD, RUN and SYS`)
+    const action = profileAction(p)
+    if (action === 'skip-ansi') plan.push(`! ${p.name} profile ${p.path} is not UTF-8; left alone`)
+    else if (action === 'skip-blocked') plan.push(`· ${p.name}: policy "${p.policy}" runs no profile, so none is created; LOAD.cmd serves this shell`)
+    else plan.push(`${rc.hasBlock ? '✓' : '→'} block in the ${p.name} profile ${p.path}${p.isBlocked ? ` (inert under the policy "${p.policy}"; LOAD.cmd serves meanwhile)` : ''}`)
     if (rc.strays.length > 0) plan.push(`! ${p.path} line ${rc.strays.join(', ')} loads another copy of ${EDITION.loader}; remove it by hand`)
   }
   if (fragment === null) plan.push('· Windows Terminal profile: LOCALAPPDATA unknown, skipped')
   else plan.push(`${hasFragment ? '✓' : '→'} Windows Terminal profile "C64 Retro Deck" (fragment, settings.json untouched)`)
-  if (/^(Restricted|AllSigned|Undefined)$/i.test(effective)) {
-    plan.push(`! Windows PowerShell runs no profile under the policy "${effective}": LOAD exists only in PowerShell 7 and in the "C64 Retro Deck" tab. To change it, run once:  ${OPEN_POLICY}`)
+  const blocked = found.filter(p => p.isBlocked)
+  if (blocked.length > 0) {
+    plan.push(`· optional: /deck setup apply policy also runs  ${OPEN_POLICY}  for ${blocked.map(p => p.name).join(' and ')}: then the profile defines LOAD itself. Not needed for LOAD.`)
   }
   plan.push(py ? `✓ Python found (${py})` : '! Python missing: winget install Python.Python.3.12 — without it LOAD shows three lines instead of the boot screen')
 
@@ -134,8 +188,25 @@ export async function setupCommand($: EngineInterface, home: string, apply: bool
   const done: string[] = []
   if (!(await copyShell($, home, version))) return `Setup stopped: could not copy the shell scripts to ${shellDir(home)}.`
   done.push('✓ shell scripts copied')
+  if (bin !== '') {
+    for (const f of CMD_FILES) {
+      if (cmds.foreign.includes(f)) { done.push(`! ${bin}/${f} is not ours; left alone`); continue }
+      const text = await $.fs.read(`${$.plugin.root}/shell/${f}`).catch(() => '')
+      const wrote = text !== '' && (await $.fs.write(`${bin}/${f}`, text).then(() => true).catch(() => false))
+      done.push(wrote ? `✓ ${f} in ${bin}` : `! could not write ${bin}/${f}`)
+    }
+  }
+  if (openPolicy) {
+    for (const p of blocked) {
+      const ran = await exe($, [p.exe, '-NoProfile', '-NonInteractive', '-Command', `${OPEN_POLICY} -Force`], 20000)
+      done.push(ran.ok ? `✓ ${p.name}: execution policy for this user set to RemoteSigned` : `! ${p.name}: policy not changed (${ran.err || 'refused'}; a group policy may rule it)`)
+    }
+    if (blocked.length > 0) found = await profiles($)
+  }
   for (const p of found) {
-    if (!p.isReadable) { done.push(`! ${p.name} profile left alone (not UTF-8)`); continue }
+    const action = profileAction(p)
+    if (action === 'skip-ansi') { done.push(`! ${p.name} profile left alone (not UTF-8)`); continue }
+    if (action === 'skip-blocked') { done.push(`· ${p.name}: no profile created (policy "${p.policy}"); LOAD.cmd serves it`); continue }
     const rc = splitRc(p.text)
     const next = (rc.rest === '' ? '' : rc.rest + rc.eol + rc.eol) + BLOCK.join(rc.eol) + rc.eol
     const wrote = await $.fs.write(p.path, next).then(() => true).catch(() => false)
@@ -146,9 +217,8 @@ export async function setupCommand($: EngineInterface, home: string, apply: bool
     const wrote = text !== '' && (await $.fs.write(fragment, text).then(() => true).catch(() => false))
     done.push(wrote ? '✓ Windows Terminal profile "C64 Retro Deck" (appears after Windows Terminal restarts)' : '! Windows Terminal profile not written')
   }
-  if (/^(Restricted|AllSigned|Undefined)$/i.test(effective)) done.push(`! for LOAD in Windows PowerShell, run once:  ${OPEN_POLICY}`)
   return ['Retro Deck set up:', ...done, '',
-    'Open a new Windows Terminal tab and type  LOAD "*",8,1  — or open the profile "C64 Retro Deck".',
+    'Open a new Windows Terminal tab — cmd or PowerShell — and type  LOAD "*",8,1  — or open the profile "C64 Retro Deck".',
     'Sessions started by LOAD draw in C64 colors (theme dark-ansi for that session only); a plain `claude` keeps your theme.',
     'Check the system with /deck doctor and send the result if anything looks wrong.'].join('\n')
 }
@@ -159,6 +229,8 @@ export async function uninstallCommand($: EngineInterface, home: string, apply: 
   const frag = localAppData === '' ? null : fragmentDir(localAppData)
   const hasFragment = frag !== null && (await $.fs.exists(frag).catch(() => false))
   const hasData = await $.fs.exists(`${home}/.claude/retro-deck`).catch(() => false)
+  const bin = await cmdDir($, home)
+  const cmds = await cmdState($, bin)
 
   const plan: string[] = []
   for (const p of found) {
@@ -166,7 +238,9 @@ export async function uninstallCommand($: EngineInterface, home: string, apply: 
     plan.push(rc.hasBlock ? `→ remove the block from the ${p.name} profile ${p.path}` : `✓ no block in the ${p.name} profile`)
     if (rc.strays.length > 0) plan.push(`! ${p.path} line ${rc.strays.join(', ')} loads ${EDITION.loader} outside the block; remove it by hand`)
   }
+  plan.push(cmds.ours.length > 0 ? `→ delete ${cmds.ours.join(' and ')} from ${bin}` : '✓ no LOAD.cmd or SYS.cmd of ours')
   plan.push(hasFragment ? '→ delete the Windows Terminal profile "C64 Retro Deck" (fragment)' : '✓ no Windows Terminal profile left')
+  plan.push('· the execution policy stays as it is (Set-ExecutionPolicy -Scope CurrentUser Undefined takes back /deck setup apply policy)')
   plan.push(hasData ? '→ delete ~/.claude/retro-deck/ (shell copies, deck cache, restore list)' : '✓ ~/.claude/retro-deck/ is gone')
 
   const last = [
@@ -182,8 +256,15 @@ export async function uninstallCommand($: EngineInterface, home: string, apply: 
   for (const p of found) {
     const rc = splitRc(p.text)
     if (!rc.hasBlock) continue
-    const wrote = await $.fs.write(p.path, rc.rest === '' ? '' : rc.rest + rc.eol).then(() => true).catch(() => false)
+    // Nothing but our block in it: setup made the file, so the file goes too.
+    const wrote = rc.rest.trim() === ''
+      ? (await win($, 'rm', [p.path])).ok
+      : await $.fs.write(p.path, rc.rest + rc.eol).then(() => true).catch(() => false)
     done.push(wrote ? `✓ block removed from the ${p.name} profile` : `! could not write ${p.path}`)
+  }
+  if (cmds.ours.length > 0) {
+    const ran = await win($, 'rm', cmds.ours.map(f => `${bin}/${f}`))
+    done.push(ran.ok ? `✓ ${cmds.ours.join(' and ')} deleted` : `! ${cmds.ours.join(' and ')} not deleted`)
   }
   if (hasFragment && frag !== null) {
     const ran = await win($, 'rm', [frag])
@@ -216,7 +297,8 @@ export async function doctorCommand($: EngineInterface, home: string, selfTab: s
     `${'session-tab'.padEnd(24)} ${selfTab || '(none found)'}`,
     `${'home'.padEnd(24)} ${home} (USERPROFILE ${env.USERPROFILE ?? '?'})`,
     `${'shell-copy'.padEnd(24)} ${stamp === null ? 'not set up (/deck setup apply)' : `version ${stamp.trim()}`}`,
-    ...found.map(p => `${('profile-' + p.name.replace(/ /g, '')).padEnd(24)} ${splitRc(p.text).hasBlock ? 'block present' : 'no block'}${p.isReadable ? '' : ', NOT UTF-8'}  [${p.path}]`),
+    ...found.map(p => `${('profile-' + p.name.replace(/ /g, '')).padEnd(24)} ${p.exists ? (splitRc(p.text).hasBlock ? 'block present' : 'no block') : 'no file'}${p.isReadable ? '' : ', NOT UTF-8'}, policy ${p.policy}${p.isBlocked ? ' (runs no profile)' : ''}  [${p.path}]`),
+    `${'LOAD.cmd'.padEnd(24)} ${(await cmdDir($, home)) || '~/.local/bin not on PATH'}; ours: ${(await cmdState($, await cmdDir($, home))).ours.join(', ') || 'none'}`,
     report.ok ? report.out : `win.ps1 doctor FAILED: ${report.err || report.out || 'no answer'}`,
   ]
   return lines.join('\n')
