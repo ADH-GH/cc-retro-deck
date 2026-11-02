@@ -70,14 +70,22 @@ type Profile = {
 }
 
 /**
+ * The policy a new tab of that PowerShell runs its profile under. Not Get-ExecutionPolicy: in a
+ * session started by LOAD.cmd the Process scope says Bypass (PSExecutionPolicyPreference is
+ * inherited), and so would every child (beta.2 read Bypass on a Restricted machine). The scopes
+ * in order of precedence without Process; none set means Windows' own default per edition.
+ */
+const EFFECTIVE_POLICY = "$p = Get-ExecutionPolicy -List | Where-Object { $_.Scope -ne 'Process' -and \"$($_.ExecutionPolicy)\" -ne 'Undefined' } | Select-Object -First 1; " +
+  "if ($p) { \"$($p.ExecutionPolicy)\" } elseif ($PSVersionTable.PSEdition -eq 'Core') { 'RemoteSigned' } else { 'Restricted' }"
+
+/**
  * Each installed PowerShell's own profile file, as that PowerShell names it (Documents may be on
- * OneDrive), and its effective execution policy. Asked without -ExecutionPolicy: with Bypass on
- * the command line every policy reads as Bypass (beta.1 said nothing on a Restricted machine).
+ * OneDrive), and its effective execution policy (EFFECTIVE_POLICY).
  */
 async function profiles($: EngineInterface): Promise<Profile[]> {
   const out: Profile[] = []
   for (const sh of SHELLS) {
-    const ran = await exe($, [sh.exe, '-NoProfile', '-NonInteractive', '-Command', '$PROFILE.CurrentUserCurrentHost; Get-ExecutionPolicy'], 20000)
+    const ran = await exe($, [sh.exe, '-NoProfile', '-NonInteractive', '-Command', `$PROFILE.CurrentUserCurrentHost; ${EFFECTIVE_POLICY}`], 20000)
     if (!ran.ok || ran.out === '') continue                 // pwsh.exe not installed
     const [first, second] = ran.out.split('\n').map(l => l.trim())
     const path = slashes(first ?? '')
@@ -94,11 +102,12 @@ async function profiles($: EngineInterface): Promise<Profile[]> {
   return out
 }
 
-/** What to do with one profile: write the block, or skip it (not UTF-8, or a new file its policy would refuse). */
+/** What to do with one profile: write the block, or skip it (not UTF-8, or a file its policy would refuse). */
 function profileAction(p: Profile): 'write' | 'skip-blocked' | 'skip-ansi' {
   if (!p.isReadable) return 'skip-ansi'
-  // A new profile under a policy that runs none would greet every new tab with a red error.
-  if (p.isBlocked && !p.exists) return 'skip-blocked'
+  // A profile under a policy that runs none greets every new tab with a red error. So none is
+  // made, and one holding nothing but our block (beta.1 made those) goes again.
+  if (p.isBlocked && splitRc(p.text).rest.trim() === '') return 'skip-blocked'
   return 'write'
 }
 
@@ -169,7 +178,9 @@ export async function setupCommand($: EngineInterface, home: string, apply: bool
     const rc = splitRc(p.text)
     const action = profileAction(p)
     if (action === 'skip-ansi') plan.push(`! ${p.name} profile ${p.path} is not UTF-8; left alone`)
-    else if (action === 'skip-blocked') plan.push(`· ${p.name}: policy "${p.policy}" runs no profile, so none is created; LOAD.cmd serves this shell`)
+    else if (action === 'skip-blocked') plan.push(p.exists
+      ? `→ ${p.name}: remove ${p.path} — it holds only our block, and the policy "${p.policy}" refuses it (the red error in every new tab)`
+      : `· ${p.name}: policy "${p.policy}" runs no profile, so none is created; LOAD.cmd serves this shell`)
     else plan.push(`${rc.hasBlock ? '✓' : '→'} block in the ${p.name} profile ${p.path}${p.isBlocked ? ` (inert under the policy "${p.policy}"; LOAD.cmd serves meanwhile)` : ''}`)
     if (rc.strays.length > 0) plan.push(`! ${p.path} line ${rc.strays.join(', ')} loads another copy of ${EDITION.loader}; remove it by hand`)
   }
@@ -206,7 +217,13 @@ export async function setupCommand($: EngineInterface, home: string, apply: bool
   for (const p of found) {
     const action = profileAction(p)
     if (action === 'skip-ansi') { done.push(`! ${p.name} profile left alone (not UTF-8)`); continue }
-    if (action === 'skip-blocked') { done.push(`· ${p.name}: no profile created (policy "${p.policy}"); LOAD.cmd serves it`); continue }
+    if (action === 'skip-blocked') {
+      if (p.exists) {
+        const ran = await win($, 'rm', [p.path])
+        done.push(ran.ok ? `✓ ${p.name}: profile removed again (only our block, refused by the policy "${p.policy}": the red error in new tabs is gone)` : `! could not remove ${p.path}`)
+      } else done.push(`· ${p.name}: no profile created (policy "${p.policy}"); LOAD.cmd serves it`)
+      continue
+    }
     const rc = splitRc(p.text)
     const next = (rc.rest === '' ? '' : rc.rest + rc.eol + rc.eol) + BLOCK.join(rc.eol) + rc.eol
     const wrote = await $.fs.write(p.path, next).then(() => true).catch(() => false)
@@ -292,7 +309,7 @@ export async function doctorCommand($: EngineInterface, home: string, selfTab: s
   const stamp = await $.fs.read(`${shellDir(home)}/.version`).catch(() => null)
   const lines = [
     `Retro Deck doctor — cc-retro-deck-windows ${version}`,
-    `${'session-WT_SESSION'.padEnd(24)} ${env.WT_SESSION ?? 'MISSING (not in Windows Terminal?)'}`,
+    `${'session-WT_SESSION'.padEnd(24)} ${env.WT_SESSION ?? '(not passed to the plugin; not needed, the tab is found by its title)'}`,
     `${'session-title-off'.padEnd(24)} ${env.TITLE_OFF === '1' ? 'yes (started by LOAD)' : 'no (plain claude: no jump to this tab)'}`,
     `${'session-tab'.padEnd(24)} ${selfTab || '(none found)'}`,
     `${'home'.padEnd(24)} ${home} (USERPROFILE ${env.USERPROFILE ?? '?'})`,

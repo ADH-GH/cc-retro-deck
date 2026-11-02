@@ -1239,8 +1239,11 @@ export const register: Register = (on, options) => {
     return ran
   }).catch(($, e, next) => next(e))
 
+  // idle_prompt is Claude Code saying it waits for the next prompt after a minute: that is
+  // DONE, not a question (ADH's test of beta.2 showed a red ASK idle_prompt). auth_success neither.
   on('classic.Notification', async ($, e, next) => {
-    if (e.notification_type !== 'permission_prompt' && state !== 'ask') {
+    const notAsking = ['permission_prompt', 'idle_prompt', 'auth_success']
+    if (!notAsking.includes(e.notification_type) && state !== 'ask') {
       await setState($, 'ask', e.notification_type)
     }
     return next(e)

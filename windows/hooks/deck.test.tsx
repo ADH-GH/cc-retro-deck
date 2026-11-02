@@ -42,7 +42,7 @@ function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[
     value: Object.keys(files).filter(f => f.startsWith(`${e.path}/`)).map(f => ({ name: f.slice(e.path.length + 1), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })),
   }))
   on('fs.read', ($, e) => {
-    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.0-beta.2"}' }
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.0-beta.3"}' }
     if (e.path.includes('/shell/') && !e.path.startsWith(HOME)) return { value: `rem cc-retro-deck-windows ${e.path}` }
     if (e.path.endsWith('/terminal/c64-fragment.json')) return { value: '{"profiles":[]}' }
     if (!(e.path in files)) throw new Error(`ENOENT: ${e.path}`)
@@ -84,6 +84,20 @@ test('registers /deck and draws the figures in the prompt footer while a turn ru
     expect(await ui.find({ type: 'Text', text: /7d/ })).toBeUndefined()
     await ui.unmount()
   }
+})
+
+test('Claude Code idling for a minute (idle_prompt) is no question: the footer does not turn to ASK', QUIET, async ($, on) => {
+  mock.clock(on)
+  engine(on, [])
+  on('classic.Notification', () => ({}))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'hello', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'hi', durationMs: 1200, isAborted: false })
+  await $.classic.Notification({ message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  const footer = await $.ui.mount({ plugin: 'cc-retro-deck-windows', surface: 'terminal', component: 'SessionMode', props: FOOTER })
+  expect(await footer.find({ type: 'Text', text: /ASK/ })).toBeUndefined()
+  expect(await footer.find({ type: 'Text', text: /DONE/ })).toBeDefined()
+  await footer.unmount()
 })
 
 test('the header band shows logo, sky, the two crabs hand in hand and the banner, and they walk over', { options: { autoOpen: false, introEvery: 0 } }, async ($, on) => {
@@ -230,7 +244,7 @@ test('/deck setup: LOAD.cmd for cmd, the block where a policy runs it, no new pr
   expect((files[ps5] ?? '').startsWith('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n\r\n# >>> cc-retro-deck >>>\r\n')).toBe(true)
   expect(files[ps7]).toContain('# >>> cc-retro-deck >>>\n')
   expect(files[`${LOCAL}/Microsoft/Windows Terminal/Fragments/cc-retro-deck/c64.json`]).toBe('{"profiles":[]}')
-  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.0-beta.2')
+  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.0-beta.3')
   expect(calls.some(argv => argv.some(a => a.startsWith('Set-ExecutionPolicy')))).toBe(false)   // never on its own
 
   await $.command.run(deckRun('setup apply'))                 // twice: still one block
@@ -255,12 +269,19 @@ test('/deck setup creates no profile a Restricted policy would refuse, and "appl
     if (argv[0] === 'powershell.exe' && asks) return `${ps5.replace(/\//g, '\\')}\r\n${policy5}\r\n`
     if (argv[0] === 'pwsh.exe') return null
     if (argv[0] === 'powershell.exe' && argv.some(a => a.startsWith('Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'))) { policy5 = 'RemoteSigned'; return '' }
+    if (verbOf(argv) === 'rm') { for (const p of argv.slice(argv.indexOf('rm') + 1)) delete files[p]; return '' }
     return ''
   }, files)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
 
   const first = await $.command.run(deckRun('setup apply'))
   expect(first.text).toMatch(/no profile created \(policy "Restricted"\)/)
+  expect(files[ps5]).toBeUndefined()
+
+  // A profile holding only our block (beta.1 wrote those) under Restricted: setup takes it away.
+  files[ps5] = '# >>> cc-retro-deck >>>\r\n. x\r\n# <<< cc-retro-deck <<<\r\n'
+  const cleaned = await $.command.run(deckRun('setup apply'))
+  expect(cleaned.text).toMatch(/profile removed again/)
   expect(files[ps5]).toBeUndefined()
 
   const opened = await $.command.run(deckRun('setup apply policy'))
