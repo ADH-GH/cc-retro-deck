@@ -93,6 +93,20 @@ test('/deck opens the pane and the pane draws its header', QUIET, async ($, on) 
   }
 })
 
+test('Claude Code idling for a minute (idle_prompt) is no question: the footer does not turn to ASK', QUIET, async ($, on) => {
+  mock.clock(on)
+  engine(on, [])
+  on('classic.Notification', () => ({}))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'hello', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'hi', durationMs: 1200, isAborted: false })
+  await $.classic.Notification({ message: 'Claude is waiting for your input', notification_type: 'idle_prompt' })
+  const footer = await $.ui.mount({ plugin: 'cc-retro-deck-mac', surface: 'terminal', component: 'SessionMode', props: FOOTER })
+  expect(await footer.find({ type: 'Text', text: /ASK/ })).toBeUndefined()
+  expect(await footer.find({ type: 'Text', text: /DONE/ })).toBeDefined()
+  await footer.unmount()
+})
+
 test('a permission request turns the footer to ASK naming the tool', QUIET, async ($, on) => {
   mock.clock(on)
   engine(on, [])
