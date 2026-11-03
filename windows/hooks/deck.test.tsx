@@ -43,7 +43,7 @@ function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[
     value: Object.keys(files).filter(f => f.startsWith(`${e.path}/`)).map(f => ({ name: f.slice(e.path.length + 1), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })),
   }))
   on('fs.read', ($, e) => {
-    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.1-beta.5"}' }
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.1-beta.6"}' }
     if (e.path.includes('/shell/') && !e.path.startsWith(HOME)) return { value: `rem cc-retro-deck-windows ${e.path}` }
     if (e.path.endsWith('/terminal/c64-fragment.json')) return { value: '{"profiles":[]}' }
     if (!(e.path in files)) throw new Error(`ENOENT: ${e.path}`)
@@ -259,7 +259,7 @@ test('/deck setup: LOAD.cmd for cmd, the block where a policy runs it, no new pr
   expect((files[ps5] ?? '').startsWith('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n\r\n# >>> cc-retro-deck >>>\r\n')).toBe(true)
   expect(files[ps7]).toContain('# >>> cc-retro-deck >>>\n')
   expect(files[`${LOCAL}/Microsoft/Windows Terminal/Fragments/cc-retro-deck/c64.json`]).toBe('{"profiles":[]}')
-  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.1-beta.5')
+  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.1-beta.6')
   expect(calls.some(argv => argv.some(a => a.startsWith('Set-ExecutionPolicy')))).toBe(false)   // never on its own
 
   await $.command.run(deckRun('setup apply'))                 // twice: still one block

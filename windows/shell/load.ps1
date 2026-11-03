@@ -16,10 +16,12 @@
 #   SYS 64738               Reset: Farben, Titel und Prompt des Tabs wie vorher
 #
 # Der Rahmen: tmux wie auf dem Mac gibt es hier nicht, Windows Terminal kann einen Tab aber in
-# Felder teilen. LOAD teilt mit `wt split-pane`: das neue Feld unten bekommt claude (C64-Run),
-# dieses Feld oben wird die Kopfleiste (head.py, etwa sieben Zeilen hoch). Endet claude, schliesst
-# sich das untere Feld, head.py endet, und LOAD kehrt oben zur Shell zurueck, die wieder den
-# ganzen Tab hat. Ohne Windows Terminal oder ohne Python: FLACH.
+# Felder teilen. LOAD teilt mit einem `wt`-Aufruf in dieselben Felder wie frame.sh: dieses Feld
+# oben wird die Kopfleiste (head.py, neun Zeilen), links und rechts je drei Spalten und unten eine
+# Zeile Rahmenfarbe (head.py --fill), in der Mitte claude (C64-Run). Die feinen Linien zwischen
+# den Feldern zieht Windows Terminal, wie tmux seine. Endet claude, schliessen sich alle Felder,
+# und LOAD kehrt oben zur Shell zurueck, die wieder den ganzen Tab hat.
+# Ohne Windows Terminal oder ohne Python: FLACH.
 # Die Farben setzt LOAD per Steuersequenz (OSC 4/10/11/12) je Feld; Windows Terminal versteht das.
 #
 # Der Tabtitel bekommt die PID dieser PowerShell in eckigen Klammern, "C64 042-demo [1234]".
@@ -124,14 +126,27 @@ function global:LOAD {
     $list = ($pass | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
     $run = ". '$((Join-Path $C64Dir 'load.ps1') -replace "'", "''")'; C64-Run '$look' '$id' @($list)"
     $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($run))
-    # Das neue Feld bekommt alles bis auf sieben Zeilen: drei Kopfleiste, vier Banner.
-    $rows = [Math]::Max(10, $Host.UI.RawUI.WindowSize.Height)
-    $size = [Math]::Min(0.92, [Math]::Max(0.5, ($rows - 7) / [double]$rows))
-    $sizeText = $size.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
-    & $wt.Source -w 0 split-pane -H -s $sizeText -d (Get-Location).Path powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $b64
+    $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
+    # Groessen sind bei wt Anteile des geteilten Feldes, nicht Zeilen: aus der Tabgroesse gerechnet.
+    $cols = [Math]::Max(40, $Host.UI.RawUI.WindowSize.Width)
+    $rows = [Math]::Max(20, $Host.UI.RawUI.WindowSize.Height)
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $share = { param($x) ([Math]::Min(0.98, [Math]::Max(0.01, $x))).ToString('0.000', $inv) }
+    $cwd = (Get-Location).Path
+    $fill = @($exe) + $pre + @((Join-Path $C64Dir 'head.py'), '--fill', $id)
+    $claude = @('powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $b64)
+    # Unter diesem Feld (9 Zeilen Kopfleiste) der linke Rand; davon rechts claude; davon rechts der
+    # rechte Rand; zurueck zu claude, darunter der untere Rand; Fokus wieder auf claude.
+    $plan = @('-w', '0',
+      'split-pane', '-H', '-s', (& $share (($rows - 9) / $rows)), '-d', $cwd) + $fill + @(';',
+      'split-pane', '-V', '-s', (& $share (($cols - 3) / $cols)), '-d', $cwd) + $claude + @(';',
+      'split-pane', '-V', '-s', (& $share (3 / ($cols - 3))), '-d', $cwd) + $fill + @(';',
+      'move-focus', 'left', ';',
+      'split-pane', '-H', '-s', (& $share (1.5 / ($rows - 9))), '-d', $cwd) + $fill + @(';',
+      'move-focus', 'up')
+    & $wt.Source @plan
     $env:C64_FRAME = $id
     $env:PYTHONUTF8 = '1'
-    $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
     try { & $exe @pre (Join-Path $C64Dir 'head.py') }
     finally { Remove-Item env:C64_FRAME -ErrorAction SilentlyContinue }
     $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
