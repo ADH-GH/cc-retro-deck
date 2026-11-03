@@ -2,7 +2,7 @@
 # verteilt. Nur fuer die Entwicklung der Windows-Fassung (Rahmen von LOAD); aendert nichts.
 #
 # Aufruf in einem frischen Windows-Terminal-Tab, Fenster maximiert, waehrend des Laufs nichts
-# anklicken (etwa 2 Minuten):
+# anklicken (etwa 2 Minuten, gegen Ende einmal verkleinern und wieder maximieren):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File frame-probe.ps1     (auch aus cmd)
 # Ergebnis: frame-probe.txt im aktuellen Ordner. Jedes Testfeld zeigt seinen Namen (P1, P2 ...)
 # und schliesst sich nach einer Weile selbst.
@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $log = New-Object System.Collections.Generic.List[string]
 function Say([string]$s) { $log.Add($s); Write-Host $s }
 
-Say "frame-probe v2 $(Get-Date -Format s)"
+Say "frame-probe v3 $(Get-Date -Format s)"
 Say "window: $($win.Current.ClassName)  $($win.Current.BoundingRectangle)"
 Say "this pane: $($Host.UI.RawUI.WindowSize.Width) x $($Host.UI.RawUI.WindowSize.Height) cells"
 $fragment = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\cc-retro-deck\c64.json'
@@ -57,46 +57,48 @@ function Dump([string]$label) {
 function Wt([string[]]$a) { & $wt @(@('-w', '0') + $a) }
 $feld = @('-p', '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}')
 
+[Console]::Title = 'P0'
 Dump 'start'
-
-# A: wie LOAD in beta.6/7 -- alles in einem Aufruf, winzige neue Felder rechts und unten
-Wt (@('split-pane', '-H', '-s', '0.85') + $feld + (Pane 'P1' 20) + @(';',
-      'split-pane', '-V', '-s', '0.97') + $feld + (Pane 'P2' 20) + @(';',
-      'split-pane', '-V', '-s', '0.015') + $feld + (Pane 'P3' 20) + @(';',
-      'move-focus', 'left', ';',
-      'split-pane', '-H', '-s', '0.03') + $feld + (Pane 'P4' 20) + @(';', 'move-focus', 'up'))
-Dump 'A: one call, tiny new panes right (P3) and bottom (P4)'
-Start-Sleep 22
-
-# B: dieselben Schritte einzeln, mit Pause dazwischen
-Wt (@('split-pane', '-H', '-s', '0.85') + $feld + (Pane 'P1' 30)); Start-Sleep 2
-Wt (@('split-pane', '-V', '-s', '0.97') + $feld + (Pane 'P2' 30)); Start-Sleep 2
-Wt (@('split-pane', '-V', '-s', '0.015') + $feld + (Pane 'P3' 30)); Dump 'B: after tiny right (P3), separate calls'
-Wt @('move-focus', 'left'); Start-Sleep 1
-Wt (@('split-pane', '-H', '-s', '0.03') + $feld + (Pane 'P4' 30)); Dump 'B: after tiny bottom (P4)'
-Start-Sleep 20
-
-# C: Groessen -- welcher kleinste Anteil wird noch angenommen (neues Feld rechts)
-foreach ($s in '0.05', '0.03', '0.02', '0.015', '0.01') {
-  Wt (@('split-pane', '-V', '-s', $s) + $feld + (Pane "S$($s.Replace('0.', ''))" 6))
-  Dump "C: new pane right with -s $s"
-  Start-Sleep 6
-}
+# Jeder Test beginnt im Feld 0, dem dieses Skripts (frischer Tab: Feld-Kennung 0); schliessen sich
+# Testfelder, hat sonst kein Feld mehr den Fokus, und wt teilt nirgends.
+function Home { Wt @('focus-pane', '-t', '0'); Start-Sleep -Milliseconds 800 }
 
 # D: swap-pane -- wandert die Groesse mit oder nur der Inhalt, und wohin geht der Fokus
-Wt (@('split-pane', '-V', '-s', '0.8') + $feld + (Pane 'P5' 14)); Start-Sleep 2
-Dump 'D: before swap (P5 new, right, 80%)'
-Wt @('swap-pane', 'left')
-Dump 'D: after swap-pane left'
-Start-Sleep 12
+Home
+Wt (@('split-pane', '-V', '-s', '0.8') + $feld + (Pane 'D1' 8)); Dump 'D: D1 new, right, 80%'
+Wt @('swap-pane', 'left'); Dump 'D: after swap-pane left (focus was D1)'
+Wt @('move-focus', 'right'); Dump 'D: after move-focus right'
+Start-Sleep 9
+Dump 'D: D1 ended (does its pane close, is P0 whole again?)'
 
-# E: Groessenaenderung -- verteilt Windows Terminal Felder anteilig?
-Wt (@('split-pane', '-H', '-s', '0.9') + $feld + (Pane 'P6' 20)); Start-Sleep 2
-Dump 'E: maximized, P6 below (90%)'
-Say '  >>> now restore the window to a small size (double-click the title bar) within 8 s'
+# G: kleinste Hoehe eines neuen Feldes unten, mit Pause angelegt
+foreach ($s in '0.045', '0.035', '0.025') {
+  Home
+  Wt (@('split-pane', '-H', '-s', $s) + $feld + (Pane "G$($s.Replace('0.', ''))" 5))
+  Dump "G: new pane below with -s $s"
+  Start-Sleep 5
+}
+
+# H: Kopf per Tausch -- unten ein grosses neues Feld, dann swap-pane up: landet P0 unten gross?
+Home
+Wt (@('split-pane', '-H', '-s', '0.86') + $feld + (Pane 'H1' 10)); Start-Sleep 1
+Wt @('swap-pane', 'up'); Dump 'H: after split below 86% and swap-pane up'
+Wt @('move-focus', 'down'); Dump 'H: after move-focus down'
+Start-Sleep 9
+
+# E: Groessenaenderung -- verteilt Windows Terminal anteilig?
+Home
+Wt (@('split-pane', '-V', '-s', '0.97') + $feld + (Pane 'E1' 40)); Start-Sleep 2
+Wt (@('split-pane', '-H', '-s', '0.9') + $feld + (Pane 'E2' 38)); Start-Sleep 1
+Dump 'E: maximized'
+Say '  >>> make the window small now (double-click the title bar), within 8 s'
+Write-Host '>>> JETZT Fenster verkleinern (Doppelklick auf die Titelleiste)' -ForegroundColor Yellow
 Start-Sleep 8
-Dump 'E: after making the window small'
-Start-Sleep 12
+Dump 'E: small'
+Write-Host '>>> JETZT wieder maximieren (Doppelklick auf die Titelleiste)' -ForegroundColor Yellow
+Start-Sleep 8
+Dump 'E: maximized again'
+Start-Sleep 22
 
 Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
 $log | Set-Content -Path $out -Encoding UTF8
