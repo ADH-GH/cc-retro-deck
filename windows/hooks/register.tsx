@@ -177,6 +177,10 @@ let showBanner = true
 let showCrab = true
 let introEvery = 60
 let showHeader = true
+// LOAD's Windows Terminal frame: C64_FRAME names it (wt-<id>). head.py draws the header in the
+// pane above, so the band stays empty; the mod renews <id>.alive so head.py knows we live.
+let frameSock = ''
+let inFrame = false
 const appleTerminal = false          // Windows Terminal's Cascadia carries the quadrant glyphs
 let modVersion = ''                  // V0.12, for the banner
 let currentTurnId = ''
@@ -935,6 +939,12 @@ let lastWidth = 120
 
 function pairRight(width: number): number { return Math.max(0, width - BORDER_COLS - PAIR_W - DANCE_LEFT) }
 
+/** Tells head.py in the pane above that this session still runs (it ends after 90 s without). */
+async function keepFrameAlive($: EngineInterface): Promise<void> {
+  if (!home || uninstalled) return
+  await $.fs.write(`${home}/.claude/retro-deck/${frameSock}.alive`, String(Date.now())).catch(() => undefined)
+}
+
 async function runPair($: EngineInterface, party = false): Promise<void> {
   if (!showCrab || (await read($, intro)) !== null) return
   const startedAt = await $.clock.now()
@@ -1101,6 +1111,11 @@ async function deckCommand($: EngineInterface, args: string): Promise<{ text: st
     return { text: await zoomAndSay($, arg === '-' || arg === 'out' ? -1 : 1) }
   }
   if (verb === 'intro') {
+    if (inFrame) {
+      // head.py, the header pane above, watches this file and sends its two crabs dancing.
+      await $.fs.write(`${home}/.claude/retro-deck/party-${frameSock}`, String(Date.now())).catch(() => undefined)
+      return { text: 'Crabs released in the header.' }
+    }
     if (showHeader) {
       void runPair($, true)
       return { text: 'Crabs released in the header.' }
@@ -1162,10 +1177,14 @@ export const register: Register = (on, options) => {
     if (found !== null && !uninstalled) await $.fs.write(prevSnapshotPath(), found).catch(() => undefined)
     await refreshRoster($)
     await measure($)
+    frameSock = (await $.env.get('C64_FRAME')) ?? ''
+    inFrame = frameSock !== ''
+    if (inFrame) void keepFrameAlive($)
     // With the header the pair walks over on start and back every introEvery seconds; without
-    // it the single crab and banner come and go, as on macOS outside the frame.
-    void (showHeader ? runPair($) : runIntro($))
-    if (introEvery > 0) {
+    // it the single crab and banner come and go, as on macOS outside the frame. In LOAD's frame
+    // the pane above does all of that.
+    if (!inFrame) void (showHeader ? runPair($) : runIntro($))
+    if (introEvery > 0 && !inFrame) {
       // Never over a question that waits.
       $.clock.every(introEvery * 1000, async () => {
         if (state !== 'ask' && (await read($, intro)) === null) void (showHeader ? runPair($) : runIntro($))
@@ -1173,6 +1192,7 @@ export const register: Register = (on, options) => {
     }
     if (autoOpen && e.surface !== null) void $.ui.open({ id: PANE, title: 'TASKS', columns: DECK_COLUMNS })
     $.clock.every(ROSTER_EVERY_MS, async () => {
+      if (inFrame) await keepFrameAlive($)
       await refreshRoster($)
       if (isWorking) await measure($)
     })
@@ -1263,6 +1283,7 @@ export const register: Register = (on, options) => {
     const width = e.props.bodyColumns
     const running = await read($, intro)
 
+    if (inFrame) return next(e)          // head.py draws the header in the pane above
     if (showHeader) {
       if (e.props.maxRows < 3 || width < DANCE_LEFT + 4) return next(e)
       lastWidth = width

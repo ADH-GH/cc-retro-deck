@@ -6,10 +6,13 @@ marketplace.
 
 What it draws:
 
-- **A header above the prompt**: the Claude Code crab as logo, a star sky, two crabs walking hand
-  in hand across it, and the C64 boot banner ("proudly presented by Alf", RETRO DECK, READY.).
-  On macOS and Linux a tmux frame holds this header; Windows has no tmux, so the mod draws it
-  itself. Turn it off with the `header` option.
+- **A header at the top of the tab**: the Claude Code crab as logo, a star sky, two crabs walking
+  hand in hand across it, and the C64 boot banner ("proudly presented by Alf", RETRO DECK,
+  READY.). macOS and Linux build this frame with tmux; on Windows `LOAD` splits the Windows
+  Terminal tab instead: a pane of about seven rows on top for the header, Claude Code below.
+  When Claude Code ends, the header pane goes and the shell has the whole tab again.
+  `LOAD "*",8,1 FLACH` starts without the split; then the mod draws the header above the prompt
+  (option `header`).
 - **The footer**: project, zoom (+)(-), model, context meter, cost, turns, the rate-limit windows
   your plan reports, and the session state (BUSY, ASK, DONE, IDLE).
 - **The deck** (`/deck`): every Claude Code session on this machine, by tab number and state.

@@ -5,16 +5,22 @@
 # markierten Block ein, der sie laedt. /deck uninstall nimmt beides zurueck.
 #
 #   LOAD "*",8,1            Tab in C64-Farben, Einschaltbildschirm: der Star-Trek-Tribut (trek.py),
-#                           bei zu kleinem Fenster die tanzende Krabbe (boot.py), dann claude
+#                           bei zu kleinem Fenster die tanzende Krabbe (boot.py), dann der Rahmen:
+#                           oben ein Feld mit Kopfleiste und Banner (head.py), darunter claude
 #   LOAD "*",8,1 --resume   alles nach dem C64-Teil geht an claude weiter
 #   LOAD "*",8,1 RAHMEN     hellblauer Grund statt dunkelblauem Bildschirm
 #   LOAD "*",8,1 FAST       ohne Einschaltbildschirm, nur die drei Zeilen
+#   LOAD "*",8,1 FLACH      ohne Rahmen: claude direkt im Tab, die Kopfleiste zeichnet der Mod
+#                           dann selbst ueber der Eingabe
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben, Titel und Prompt des Tabs wie vorher
 #
-# Einen tmux-Rahmen wie auf dem Mac gibt es hier nicht: Kopfleiste und Banner zeichnet der Mod
-# selbst ueber der Eingabe. Die Farben setzt LOAD per Steuersequenz (OSC 4/10/11/12) nur in
-# diesem Tab; Windows Terminal versteht das.
+# Der Rahmen: tmux wie auf dem Mac gibt es hier nicht, Windows Terminal kann einen Tab aber in
+# Felder teilen. LOAD teilt mit `wt split-pane`: das neue Feld unten bekommt claude (C64-Run),
+# dieses Feld oben wird die Kopfleiste (head.py, etwa sieben Zeilen hoch). Endet claude, schliesst
+# sich das untere Feld, head.py endet, und LOAD kehrt oben zur Shell zurueck, die wieder den
+# ganzen Tab hat. Ohne Windows Terminal oder ohne Python: FLACH.
+# Die Farben setzt LOAD per Steuersequenz (OSC 4/10/11/12) je Feld; Windows Terminal versteht das.
 #
 # Der Tabtitel bekommt die PID dieser PowerShell in eckigen Klammern, "C64 042-demo [1234]".
 # Daran findet die Tafel den Tab wieder, wenn sie hinspringt. Damit Claude Code den Titel nicht
@@ -60,15 +66,30 @@ function global:C64-Project {
   if ($hit) { $hit } else { $parts[-1] }
 }
 
+# Claude Code im unteren Feld des Rahmens: Farben, Tabtitel mit der PID dieser PowerShell, und
+# ~/.claude/retro-deck/<id>.pid, an der head.py oben sieht, dass die Sitzung laeuft.
+function global:C64-Run([string]$look, [string]$id, [string[]]$pass) {
+  C64-Colors $look
+  $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
+  $dir = Join-Path $HOME '.claude\retro-deck'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $pidFile = Join-Path $dir "$id.pid"
+  Set-Content -Path $pidFile -Value $PID -Encoding ASCII
+  $env:C64_FRAME = $id
+  $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
+  try { & claude --settings (Join-Path $C64Dir 'c64-settings.json') @pass }
+  finally { Remove-Item $pidFile, (Join-Path $dir "$id.alive") -ErrorAction SilentlyContinue }
+}
+
 function global:LOAD {
-  $look = 'screen'; $fast = $false; $pass = @()
+  $look = 'screen'; $fast = $false; $flat = $false; $pass = @()
   foreach ($a in $args) {
     if ($a -is [array]) { $a = ($a -join ',') }          # LOAD "*",8,1 kommt als ein Array an
     switch -Regex ([string]$a) {
       '^\*(,8(,1)?)?$' { break }                         # der C64-Teil, verschluckt
       '^(?i)rahmen$' { $look = 'rahmen'; break }
       '^(?i)fast$' { $fast = $true; break }
-      '^(?i)(flach|flat)$' { break }                     # gibt es hier nicht: nie ein Rahmen
+      '^(?i)(flach|flat)$' { $flat = $true; break }
       default { $pass += [string]$a }
     }
   }
@@ -77,8 +98,8 @@ function global:LOAD {
   if (-not (Test-Path variable:global:C64OldTitle)) { $global:C64OldTitle = $Host.UI.RawUI.WindowTitle }
   $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
 
-  $py = if ($fast -or -not $interactive) { '' } else { C64-Python }
-  if (-not $py) {
+  $py = if ($interactive) { C64-Python } else { '' }
+  if ($fast -or -not $py) {
     ''; 'SEARCHING FOR *'; Start-Sleep -Milliseconds 400
     'LOADING'; Start-Sleep -Milliseconds 400
     'READY.'; Start-Sleep -Milliseconds 300
@@ -97,6 +118,25 @@ function global:LOAD {
 
   # Das C64-Theme gilt nur fuer Sitzungen aus LOAD (dark-ansi zeichnet in den 16 Farben oben);
   # als Datei, weil Windows PowerShell 5.1 Anfuehrungszeichen in Argumenten verschluckt.
+  $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
+  if (-not $flat -and $interactive -and $py -and $env:WT_SESSION -and $wt) {
+    $id = 'wt-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $list = ($pass | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
+    $run = ". '$((Join-Path $C64Dir 'load.ps1') -replace "'", "''")'; C64-Run '$look' '$id' @($list)"
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($run))
+    # Das neue Feld bekommt alles bis auf sieben Zeilen: drei Kopfleiste, vier Banner.
+    $rows = [Math]::Max(10, $Host.UI.RawUI.WindowSize.Height)
+    $size = [Math]::Min(0.92, [Math]::Max(0.5, ($rows - 7) / [double]$rows))
+    $sizeText = $size.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
+    & $wt.Source -w 0 split-pane -H -s $sizeText -d (Get-Location).Path powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $b64
+    $env:C64_FRAME = $id
+    $env:PYTHONUTF8 = '1'
+    $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
+    try { & $exe @pre (Join-Path $C64Dir 'head.py') }
+    finally { Remove-Item env:C64_FRAME -ErrorAction SilentlyContinue }
+    $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
+    return
+  }
   $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
   try { & claude --settings (Join-Path $C64Dir 'c64-settings.json') @pass }
   finally { Remove-Item env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE -ErrorAction SilentlyContinue }

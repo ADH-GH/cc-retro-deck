@@ -19,10 +19,11 @@ function verbOf(argv: readonly string[]): string {
 
 // What stands for the engine beneath the mod: the session's figures and the
 // host calls (files, processes) the kit does not answer by itself.
-function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[]) => string | null = () => '', files: Record<string, string> = {}) {
+function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[]) => string | null = () => '', files: Record<string, string> = {}, env: Record<string, string> = {}) {
   mock.env(on, {
     USERPROFILE: HOME.replace(/\//g, '\\'), LOCALAPPDATA: LOCAL.replace(/\//g, '\\'), WT_SESSION: 'wt-test',
     PATH: `C:\\Windows\\system32;${HOME.replace(/\//g, '\\')}\\.local\\bin`,
+    ...env,
   })
   mock.store(on)
   on('session.start', () => ({ cwd: ROOT }))
@@ -42,7 +43,7 @@ function engine(on: On, registered: string[], stdoutFor: (argv: readonly string[
     value: Object.keys(files).filter(f => f.startsWith(`${e.path}/`)).map(f => ({ name: f.slice(e.path.length + 1), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })),
   }))
   on('fs.read', ($, e) => {
-    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.1-beta.4"}' }
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"version":"0.12.1-beta.5"}' }
     if (e.path.includes('/shell/') && !e.path.startsWith(HOME)) return { value: `rem cc-retro-deck-windows ${e.path}` }
     if (e.path.endsWith('/terminal/c64-fragment.json')) return { value: '{"profiles":[]}' }
     if (!(e.path in files)) throw new Error(`ENOENT: ${e.path}`)
@@ -119,6 +120,20 @@ test('the header band shows logo, sky, the two crabs hand in hand and the banner
   expect(await standing.find({ type: 'Text', text: /━━●━━/ })).toBeDefined()
   expect(await standing.find({ type: 'Text', text: /RETRO DECK V0\.12/ })).toBeDefined()
   await standing.unmount()
+})
+
+test('in LOAD\'s Windows Terminal frame the band stays empty, the mod keeps the frame alive, and /deck intro wakes the header pane', { options: { autoOpen: false, introEvery: 0 } }, async ($, on) => {
+  const files: Record<string, string> = {}
+  mock.clock(on)
+  engine(on, [], () => '', files, { C64_FRAME: 'wt-1234abcd' })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(files[`${HOME}/.claude/retro-deck/wt-1234abcd.alive`]).toBeDefined()
+  const band = await $.ui.mount({ plugin: 'cc-retro-deck-windows', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await band.find({ type: 'Text', text: /CLAUDE CODE/ })).toBeUndefined()
+  await band.unmount()
+  const intro = await $.command.run(deckRun('intro'))
+  expect(intro.text).toMatch(/header/)
+  expect(files[`${HOME}/.claude/retro-deck/party-wt-1234abcd`]).toBeDefined()
 })
 
 test('without the header the single crab and banner come and go, in block glyphs', { options: { autoOpen: false, introEvery: 0, header: false } }, async ($, on) => {
@@ -244,7 +259,7 @@ test('/deck setup: LOAD.cmd for cmd, the block where a policy runs it, no new pr
   expect((files[ps5] ?? '').startsWith('Set-Alias ll ls\r\n. C:\\old\\load.ps1\r\n\r\n# >>> cc-retro-deck >>>\r\n')).toBe(true)
   expect(files[ps7]).toContain('# >>> cc-retro-deck >>>\n')
   expect(files[`${LOCAL}/Microsoft/Windows Terminal/Fragments/cc-retro-deck/c64.json`]).toBe('{"profiles":[]}')
-  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.1-beta.4')
+  expect(files[`${HOME}/.claude/retro-deck/shell/.version`]).toBe('0.12.1-beta.5')
   expect(calls.some(argv => argv.some(a => a.startsWith('Set-ExecutionPolicy')))).toBe(false)   // never on its own
 
   await $.command.run(deckRun('setup apply'))                 // twice: still one block
