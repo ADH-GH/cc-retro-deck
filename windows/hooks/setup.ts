@@ -146,6 +146,12 @@ export async function refreshShell($: EngineInterface, home: string): Promise<vo
   const version = await pluginVersion($)
   if (version === '' || stamp.trim() === version) return
   await copyShell($, home, version)
+  // The fragment carries the profiles the frame panes open with; renew it only where setup put one.
+  const localAppData = slashes((await $.env.get('LOCALAPPDATA')) ?? '')
+  const fragment = localAppData === '' ? null : `${fragmentDir(localAppData)}/c64.json`
+  if (fragment === null || !(await $.fs.exists(fragment).catch(() => false))) return
+  const text = await $.fs.read(`${$.plugin.root}/terminal/c64-fragment.json`).catch(() => '')
+  if (text !== '') await $.fs.write(fragment, text).catch(() => undefined)
 }
 
 async function copyShell($: EngineInterface, home: string, version: string): Promise<boolean> {

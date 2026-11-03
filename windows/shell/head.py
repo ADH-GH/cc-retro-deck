@@ -26,7 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_S, HIDE,  # noqa: E402
-                  LB, LOGO_TEXT, PAIR_W, PARTY, RESET, SCREEN_BG, SHOW, STAND_S, WALK, WHITE,
+                  LB, LOGO_TEXT, PAIR_W, PARTY, RESET, SHOW, STAND_S, WALK, WHITE,
                   crab_rows, make_sky, mod_version, paint_crab, paint_pair, paint_sky,
                   party_file, party_stamp)
 
@@ -36,6 +36,9 @@ STALE_S = 90
 # Colodore: Rahmenfarbe Hellblau auf ANSI 12, wie load.ps1 sie setzt. Ein Randfeld startet Windows
 # Terminal mit seinem eigenen Farbschema; das Feld setzt sich die Farbe darum selbst.
 LIGHT_BLUE = '70/6d/eb'
+# Das Banner fest im Bildschirmblau: das Feld oben stellt seinen Grund auf Rahmenfarbe, damit auch
+# der Innenabstand von Windows Terminal hellblau ist und keine dunkle Kante unter der Trennzeile bleibt.
+SCREEN = '\033[48;2;46;44;155m'
 
 
 def frame_id():
@@ -65,7 +68,7 @@ def banner_rows(cols, top, rows):
         if r > rows:
             break
         text = (line.center(inner) if i < 2 else (' ' + line).ljust(inner))[:inner]
-        out.append(at(r, 1) + BORDER_BG + margin + SCREEN_BG + (BOLD if i == 1 else '') + LB + text + RESET
+        out.append(at(r, 1) + BORDER_BG + margin + SCREEN + (BOLD if i == 1 else '') + LB + text + RESET
                    + BORDER_BG + margin + RESET)
     return ''.join(out)
 
@@ -127,7 +130,7 @@ def main():
     party = False
     sky_span, stars, labels = -1, [], []
     last_size = None
-    write(HIDE + CLEAR)
+    write(f'\033]11;rgb:{LIGHT_BLUE}\007' + HIDE + CLEAR)
     try:
         while True:
             if session_over(pid_path, alive_path, state):

@@ -34,6 +34,18 @@
         "face": "Cascadia Mono"
       },
       "cursorShape": "filledBox"
+    },
+    {
+      "guid": "{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}",
+      "name": "C64 Retro Deck Feld",
+      "hidden": true,
+      "colorScheme": "C64",
+      "font": {
+        "face": "Cascadia Mono"
+      },
+      "cursorShape": "filledBox",
+      "padding": "0",
+      "scrollbarState": "hidden"
     }
   ]
 }

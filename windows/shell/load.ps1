@@ -137,18 +137,24 @@ function global:LOAD {
     $claude = @('powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $b64)
     # Unter diesem Feld (9 Zeilen Kopfleiste) der linke Rand; davon rechts claude; davon rechts der
     # rechte Rand; zurueck zu claude, darunter der untere Rand; Fokus wieder auf claude.
+    # Die neuen Felder nehmen das versteckte Profil "C64 Retro Deck Feld" aus dem Fragment: ohne
+    # Innenabstand und Scrollbalken, sonst bleibt von 3 Spalten Rand keine einzige Zeichenzelle, und
+    # Windows Terminal verweigert die Teilung ganz. Dieses Feld oben behaelt seinen Innenabstand (fast
+    # eine Zeile), darum bekommt es Platz fuer gut 10 Zeilen; was ueber 9 hinausgeht, ist Rahmenfarbe.
+    $feld = @('-p', '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}', '-d', $cwd)
+    $top = 10.2
     $plan = @('-w', '0',
-      'split-pane', '-H', '-s', (& $share (($rows - 9) / $rows)), '-d', $cwd) + $fill + @(';',
-      'split-pane', '-V', '-s', (& $share (($cols - 3) / $cols)), '-d', $cwd) + $claude + @(';',
-      'split-pane', '-V', '-s', (& $share (3 / ($cols - 3))), '-d', $cwd) + $fill + @(';',
+      'split-pane', '-H', '-s', (& $share (($rows - $top) / $rows))) + $feld + $fill + @(';',
+      'split-pane', '-V', '-s', (& $share (($cols - 3.3) / $cols))) + $feld + $claude + @(';',
+      'split-pane', '-V', '-s', (& $share (3.4 / ($cols - 3)))) + $feld + $fill + @(';',
       'move-focus', 'left', ';',
-      'split-pane', '-H', '-s', (& $share (1.5 / ($rows - 9))), '-d', $cwd) + $fill + @(';',
+      'split-pane', '-H', '-s', (& $share (1.5 / ($rows - $top)))) + $feld + $fill + @(';',
       'move-focus', 'up')
     & $wt.Source @plan
     $env:C64_FRAME = $id
     $env:PYTHONUTF8 = '1'
     try { & $exe @pre (Join-Path $C64Dir 'head.py') }
-    finally { Remove-Item env:C64_FRAME -ErrorAction SilentlyContinue }
+    finally { Remove-Item env:C64_FRAME -ErrorAction SilentlyContinue; C64-Colors $look }
     $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
     return
   }
