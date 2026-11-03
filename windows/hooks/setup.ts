@@ -146,6 +146,12 @@ export async function refreshShell($: EngineInterface, home: string): Promise<vo
   const version = await pluginVersion($)
   if (version === '' || stamp.trim() === version) return
   await copyShell($, home, version)
+  // Our LOAD.cmd and SYS.cmd on PATH are copies too; renew them, never a foreign file of that name.
+  const bin = await cmdDir($, home)
+  for (const f of (await cmdState($, bin)).ours) {
+    const text = await $.fs.read(`${$.plugin.root}/shell/${f}`).catch(() => '')
+    if (text !== '') await $.fs.write(`${bin}/${f}`, text).catch(() => undefined)
+  }
   // The fragment carries the profiles the frame panes open with; renew it only where setup put one.
   const localAppData = slashes((await $.env.get('LOCALAPPDATA')) ?? '')
   const fragment = localAppData === '' ? null : `${fragmentDir(localAppData)}/c64.json`
