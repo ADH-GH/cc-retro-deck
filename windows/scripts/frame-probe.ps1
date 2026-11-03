@@ -3,7 +3,7 @@
 #
 # Aufruf in einem frischen Windows-Terminal-Tab, Fenster maximiert, waehrend des Laufs nichts
 # anklicken (etwa 2 Minuten):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File frame-probe.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File frame-probe.ps1     (auch aus cmd)
 # Ergebnis: frame-probe.txt im aktuellen Ordner. Jedes Testfeld zeigt seinen Namen (P1, P2 ...)
 # und schliesst sich nach einer Weile selbst.
 
@@ -17,19 +17,28 @@ $T = [System.Windows.Automation.TreeScope]
 $out = Join-Path (Get-Location).Path 'frame-probe.txt'
 $wt = (Get-Command wt.exe).Source
 $win = $A::FromHandle([Probe.W]::GetForegroundWindow())
+$dir = Join-Path $env:TEMP 'c64-frame-probe'
+Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $log = New-Object System.Collections.Generic.List[string]
 function Say([string]$s) { $log.Add($s); Write-Host $s }
 
-Say "frame-probe $(Get-Date -Format s)"
-Say "wt: $wt  $((Get-Item $wt).VersionInfo.ProductVersion)"
+Say "frame-probe v2 $(Get-Date -Format s)"
 Say "window: $($win.Current.ClassName)  $($win.Current.BoundingRectangle)"
 Say "this pane: $($Host.UI.RawUI.WindowSize.Width) x $($Host.UI.RawUI.WindowSize.Height) cells"
 $fragment = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\cc-retro-deck\c64.json'
 Say "fragment has Feld profile: $((Test-Path $fragment) -and ((Get-Content $fragment -Raw) -match 'Feld'))"
 
+# Jedes Testfeld schreibt alle 0,3 s seinen Namen und seine Groesse in Zellen in eine Datei und
+# setzt den Titel auf seinen Namen (der Tabtitel zeigt so das Feld mit dem Fokus). Als
+# -EncodedCommand, weil wt.exe ein Semikolon im Befehl als eigenen Unterbefehl liest.
 function Pane([string]$name, [int]$life) {
-  $cmd = "[Console]::Title='$name'; Write-Host '$name'; Start-Sleep $life"
-  @('powershell.exe', '-NoLogo', '-NoProfile', '-Command', $cmd)
+  $f = Join-Path $dir "$name.txt"
+  $code = "[Console]::Title='$name'; Write-Host '$name'; `$end=(Get-Date).AddSeconds($life); " +
+          "while ((Get-Date) -lt `$end) { `$s=`$Host.UI.RawUI.WindowSize; " +
+          "Set-Content -Path '$f' -Value ('{0} x {1}' -f `$s.Width, `$s.Height); Start-Sleep -Milliseconds 300 }; " +
+          "Remove-Item '$f' -ErrorAction SilentlyContinue"
+  @('powershell.exe', '-NoLogo', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code)))
 }
 
 function Dump([string]$label) {
@@ -38,22 +47,11 @@ function Dump([string]$label) {
   $tabs = $win.FindAll($T::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)))
   foreach ($t in $tabs) {
     $sel = try { $t.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } catch { $false }
-    if ($sel) { Say "  focused (tab title): $($t.Current.Name)" }
+    if ($sel) { Say "  focus (tab title): $($t.Current.Name)" }
   }
-  $panes = $win.FindAll($T::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'TermControl')))
-  if ($panes.Count -eq 0) {
-    $names = $win.FindAll($T::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
-      ForEach-Object { $_.Current.ClassName } | Sort-Object -Unique
-    Say "  no TermControl; classes: $($names -join ', ')"
-    return
-  }
-  foreach ($p in $panes) {
-    $r = $p.Current.BoundingRectangle
-    $text = try { $p.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(400) } catch { '' }
-    $id = ([regex]::Match($text, '\bP\d+\b')).Value
-    if (-not $id) { $id = 'this' }
-    Say ("  {0,-5} x={1,5} y={2,5} w={3,5} h={4,5}  focus={5}" -f $id, [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height, $p.Current.HasKeyboardFocus)
-  }
+  Say ("  this  {0} x {1}" -f $Host.UI.RawUI.WindowSize.Width, $Host.UI.RawUI.WindowSize.Height)
+  Get-ChildItem $dir -Filter '*.txt' | Where-Object { $_.LastWriteTime -gt (Get-Date).AddSeconds(-2) } | Sort-Object Name |
+    ForEach-Object { Say ("  {0,-5} {1}" -f $_.BaseName, (Get-Content $_.FullName -Raw).Trim()) }
 }
 
 function Wt([string[]]$a) { & $wt @(@('-w', '0') + $a) }
@@ -80,7 +78,7 @@ Start-Sleep 20
 
 # C: Groessen -- welcher kleinste Anteil wird noch angenommen (neues Feld rechts)
 foreach ($s in '0.05', '0.03', '0.02', '0.015', '0.01') {
-  Wt (@('split-pane', '-V', '-s', $s) + $feld + (Pane "P$($s.Replace('0.', ''))" 6))
+  Wt (@('split-pane', '-V', '-s', $s) + $feld + (Pane "S$($s.Replace('0.', ''))" 6))
   Dump "C: new pane right with -s $s"
   Start-Sleep 6
 }
@@ -100,5 +98,6 @@ Start-Sleep 8
 Dump 'E: after making the window small'
 Start-Sleep 12
 
+Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
 $log | Set-Content -Path $out -Encoding UTF8
 Write-Host "written: $out"
