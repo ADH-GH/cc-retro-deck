@@ -3,7 +3,13 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
-## [0.12.0] — unreleased
+## [0.12.1] — 2026-11-03
+
+### Fixed
+- After a minute without input the footer turned to a red `ASK idle_prompt`: Claude Code's
+  notice that it waits for your next prompt is no question. It now stays DONE or IDLE.
+
+## [0.12.0] — 2026-10-31
 
 First public release.
 

@@ -1,6 +1,6 @@
 {
   "name": "cc-retro-deck-linux",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Linux edition: C64/Amiga-styled figures in the prompt footer, a deck of every running Claude session (tab id, state, topic) with jumps between the windows of the C64 tmux frame, a dancing crab, and an opt-in auto-switch to the window that needs you.",
   "types": "./types/index.d.ts",
   "userConfig": {
