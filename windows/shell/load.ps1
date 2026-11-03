@@ -16,11 +16,11 @@
 #   SYS 64738               Reset: Farben, Titel und Prompt des Tabs wie vorher
 #
 # Der Rahmen: tmux wie auf dem Mac gibt es hier nicht, Windows Terminal kann einen Tab aber in
-# Felder teilen. LOAD teilt mit einem `wt`-Aufruf in dieselben Felder wie frame.sh: dieses Feld
-# oben wird die Kopfleiste (head.py, neun Zeilen), links und rechts je drei Spalten und unten eine
-# Zeile Rahmenfarbe (head.py --fill), in der Mitte claude (C64-Run). Die feinen Linien zwischen
-# den Feldern zieht Windows Terminal, wie tmux seine. Endet claude, schliessen sich alle Felder,
-# und LOAD kehrt oben zur Shell zurueck, die wieder den ganzen Tab hat.
+# Felder teilen, nur nicht nachtraeglich auf eine Groesse setzen. Darum startet LOAD Claude Code in
+# einem neuen Feld und schliesst sein eigenes; im neuen Feld legt head.py --frame dieselben Felder
+# an wie frame.sh (oben neun Zeilen Kopfleiste, links und rechts drei Spalten, unten zwei Zeilen
+# Rahmenfarbe) und baut sie nach jeder Groessenaenderung des Fensters neu. Endet Claude Code,
+# schliessen sich die Hilfsfelder, und das Feld bleibt als PowerShell mit READY. als Prompt.
 # Ohne Windows Terminal oder ohne Python: FLACH.
 # Die Farben setzt LOAD per Steuersequenz (OSC 4/10/11/12) je Feld; Windows Terminal versteht das.
 #
@@ -68,23 +68,37 @@ function global:C64-Project {
   if ($hit) { $hit } else { $parts[-1] }
 }
 
-# Claude Code im unteren Feld des Rahmens: Farben, Tabtitel mit der PID dieser PowerShell, und
-# ~/.claude/retro-deck/<id>.pid, an der head.py oben sieht, dass die Sitzung laeuft.
-function global:C64-Run([string]$look, [string]$id, [string[]]$pass) {
+# Claude Code im Rahmen: dieses Feld bleibt, Kopfleiste und Raender sind Hilfsfelder darum, die
+# head.py --frame (im Hintergrund, an derselben Konsole) anlegt und bei jeder Groessenaenderung neu
+# aufbaut. Farben, Tabtitel mit der PID dieser PowerShell, und ~/.claude/retro-deck/<id>.pid, an
+# der die Hilfsfelder sehen, dass die Sitzung laeuft. Endet Claude Code, schliessen sie sich, und
+# dieses Feld hat den Tab mit READY. als Prompt.
+function global:C64-Run([string]$look, [string]$id, [string]$py, [string[]]$pass) {
   C64-Colors $look
   $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
+  Set-Item function:global:prompt { "`n$([char]27)[94mREADY.$([char]27)[0m`n" }
   $dir = Join-Path $HOME '.claude\retro-deck'
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $pidFile = Join-Path $dir "$id.pid"
   Set-Content -Path $pidFile -Value $PID -Encoding ASCII
+  if ($py) {
+    $exe, $pre = $py -split '\|'
+    $argv = @($pre | Where-Object { $_ }) + @((Join-Path $C64Dir 'head.py'), '--frame', $id)
+    $env:PYTHONUTF8 = '1'
+    Start-Process -FilePath $exe -ArgumentList (($argv | ForEach-Object { '"' + $_ + '"' }) -join ' ') `
+      -NoNewWindow -WorkingDirectory (Get-Location).Path | Out-Null
+  }
   $env:C64_FRAME = $id
   $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
   try { & claude --settings (Join-Path $C64Dir 'c64-settings.json') @pass }
-  finally { Remove-Item $pidFile, (Join-Path $dir "$id.alive") -ErrorAction SilentlyContinue }
+  finally {
+    Remove-Item $pidFile, (Join-Path $dir "$id.alive") -ErrorAction SilentlyContinue
+    Remove-Item env:C64_FRAME, env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE -ErrorAction SilentlyContinue
+  }
 }
 
 function global:LOAD {
-  $look = 'screen'; $fast = $false; $flat = $false; $pass = @()
+  $look = 'screen'; $fast = $false; $flat = $false; $viaCmd = $false; $pass = @()
   foreach ($a in $args) {
     if ($a -is [array]) { $a = ($a -join ',') }          # LOAD "*",8,1 kommt als ein Array an
     switch -Regex ([string]$a) {
@@ -92,6 +106,7 @@ function global:LOAD {
       '^(?i)rahmen$' { $look = 'rahmen'; break }
       '^(?i)fast$' { $fast = $true; break }
       '^(?i)(flach|flat)$' { $flat = $true; break }
+      '^__CMD__$' { $viaCmd = $true; break }              # von LOAD.cmd: cmd schliesst danach
       default { $pass += [string]$a }
     }
   }
@@ -124,38 +139,19 @@ function global:LOAD {
   if (-not $flat -and $interactive -and $py -and $env:WT_SESSION -and $wt) {
     $id = 'wt-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
     $list = ($pass | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
-    $run = ". '$((Join-Path $C64Dir 'load.ps1') -replace "'", "''")'; C64-Run '$look' '$id' @($list)"
+    $run = ". '$((Join-Path $C64Dir 'load.ps1') -replace "'", "''")'; C64-Run '$look' '$id' '$($py -replace "'", "''")' @($list)"
     $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($run))
-    $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
-    # Groessen sind bei wt Anteile des geteilten Feldes, nicht Zeilen: aus der Tabgroesse gerechnet.
-    $cols = [Math]::Max(40, $Host.UI.RawUI.WindowSize.Width)
-    $rows = [Math]::Max(20, $Host.UI.RawUI.WindowSize.Height)
-    $inv = [Globalization.CultureInfo]::InvariantCulture
-    $share = { param($x) ([Math]::Min(0.98, [Math]::Max(0.01, $x))).ToString('0.000', $inv) }
-    $cwd = (Get-Location).Path
-    $fill = @($exe) + $pre + @((Join-Path $C64Dir 'head.py'), '--fill', $id)
-    $claude = @('powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $b64)
-    # Unter diesem Feld (9 Zeilen Kopfleiste) der linke Rand; davon rechts claude; davon rechts der
-    # rechte Rand; zurueck zu claude, darunter der untere Rand; Fokus wieder auf claude.
-    # Die neuen Felder nehmen das versteckte Profil "C64 Retro Deck Feld" aus dem Fragment: ohne
-    # Innenabstand und Scrollbalken, sonst bleibt von 3 Spalten Rand keine einzige Zeichenzelle, und
-    # Windows Terminal verweigert die Teilung ganz. Dieses Feld oben behaelt seinen Innenabstand (fast
-    # eine Zeile), darum bekommt es Platz fuer gut 10 Zeilen; was ueber 9 hinausgeht, ist Rahmenfarbe.
-    $feld = @('-p', '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}', '-d', $cwd)
-    $top = 10.2
-    $plan = @('-w', '0',
-      'split-pane', '-H', '-s', (& $share (($rows - $top) / $rows))) + $feld + $fill + @(';',
-      'split-pane', '-V', '-s', (& $share (($cols - 3.3) / $cols))) + $feld + $claude + @(';',
-      'split-pane', '-V', '-s', (& $share (3.4 / ($cols - 3)))) + $feld + $fill + @(';',
-      'move-focus', 'left', ';',
-      'split-pane', '-H', '-s', (& $share (1.5 / ($rows - $top)))) + $feld + $fill + @(';',
-      'move-focus', 'up')
-    & $wt.Source @plan
-    $env:C64_FRAME = $id
-    $env:PYTHONUTF8 = '1'
-    try { & $exe @pre (Join-Path $C64Dir 'head.py') }
-    finally { Remove-Item env:C64_FRAME -ErrorAction SilentlyContinue; C64-Colors $look }
-    $Host.UI.RawUI.WindowTitle = "C64 $(C64-Project) [$PID]"
+    # Claude Code in ein neues Feld mit dem versteckten Profil "C64 Retro Deck Feld" (ohne
+    # Innenabstand und Scrollbalken: Windows Terminal teilt davon auch schmale Raender ab, von einem
+    # Feld mit Innenabstand nicht). Dieses Feld schliesst sich danach, das neue hat den ganzen Tab, und
+    # head.py --frame legt darum den Rahmen an. -NoExit: nach Claude Code bleibt dort eine Shell.
+    $claude = @('powershell.exe', '-NoLogo', '-NoProfile', '-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $b64)
+    & $wt.Source @(@('-w', '0', 'split-pane', '-H', '-s', '0.9', '-p', '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}',
+                     '-d', (Get-Location).Path) + $claude)
+    # cmd schliesst LOAD.cmd bei Rueckgabe 64; eine PowerShell schliesst hier selbst (0 = Feld zu).
+    # Erst wenn das neue Feld steht: als letztes Feld schloesse dieses sonst den ganzen Tab.
+    Start-Sleep -Milliseconds 1200
+    [Environment]::Exit($(if ($viaCmd) { 64 } else { 0 }))
     return
   }
   $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'

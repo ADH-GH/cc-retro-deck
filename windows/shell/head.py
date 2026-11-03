@@ -1,26 +1,36 @@
 #!/usr/bin/env python3
-"""Kopfleiste und Banner als eigenes Feld oben im Windows-Terminal-Tab (nur Windows-Fassung).
+"""Der Rahmen um Claude Code in Windows Terminal (nur Windows-Fassung).
 
 Auf macOS und Linux legt tmux Felder um Claude Code (frame.sh, boot.py --band und --banner).
-Windows hat kein tmux; dort teilt LOAD den Tab mit `wt split-pane` in dieselben Felder: oben
-dieses Feld, links, rechts und unten je ein schmales Randfeld, in der Mitte Claude Code. Oben
-steht wie im tmux-Rahmen: drei Zeilen Kopfleiste (Logo, Himmel, zwei Krabben Hand in Hand), eine
-Trennzeile in Rahmenfarbe, vier Zeilen Banner auf dem Bildschirmblau, wieder eine Trennzeile.
+Windows hat kein tmux; dort teilt Windows Terminal den Tab in Felder, kann sie aber nicht
+nachtraeglich auf eine Groesse setzen und verteilt sie bei Groessenaenderung anteilig. Darum
+laeuft Claude Code in einem Feld, das bleibt, und alles darum sind Hilfsfelder, die sich bei jeder
+Groessenaenderung schliessen und in der richtigen Groesse neu entstehen:
 
-    head.py                 das Feld oben (C64_FRAME aus der Umgebung)
-    head.py --fill <id>     ein Randfeld: nur Rahmenfarbe; Windows Terminal startet es selbst,
-                            ohne die Umgebung von LOAD, darum die Kennung als Argument
+    head.py --frame <id>         im Hintergrund an der Konsole von Claude Code (C64-Run): legt die
+                                 Felder an, beobachtet die Groesse, baut neu
+    head.py --head <id>          oben: drei Zeilen Kopfleiste (Logo, Himmel, zwei Krabben Hand in
+                                 Hand), Trennzeile, vier Zeilen Banner, Trennzeile
+    head.py --fill <id> <rolle>  links, rechts (drei Spalten), unten (zwei Zeilen): Rahmenfarbe
 
-Das Ende erkennt es an ~/.claude/retro-deck/<C64_FRAME>.pid: load.ps1 legt die Datei beim Start
-von Claude Code an und loescht sie danach; der Mod erneuert daneben <C64_FRAME>.alive alle 15 s.
-Fehlt die PID-Datei (nachdem sie da war) oder ist .alive laenger als 90 s alt, endet das Feld,
-und LOAD kehrt oben zur Shell zurueck. /deck intro beruehrt party-<C64_FRAME> wie im tmux-Rahmen.
-Den Tabtitel setzt es auf denselben wie unten ("C64 <Projekt> [pid]"), damit die Tafel den Tab
-findet, gleich welches Feld gerade vorn ist.
+Windows Terminal startet neue Felder ohne die Umgebung von LOAD, darum die Kennung als Argument.
+Gemessen auf dem PC (scripts/frame-probe.ps1): ein neues Feld kommt immer rechts oder unten an,
+schmal nur, wenn es einzeln mit Pause angelegt wird und das geteilte Feld keinen Innenabstand hat
+(Profil "C64 Retro Deck Feld"), unten mindestens zwei Zeilen; swap-pane tauscht die Inhalte zweier
+Felder, die Groessen bleiben am Platz, der Fokus wandert mit dem Inhalt. Kopf und linker Rand
+entstehen darum gross rechts oder unten und werden an ihren Platz getauscht.
+
+Das Ende erkennt jedes Teil an ~/.claude/retro-deck/<id>.pid: C64-Run legt die Datei beim Start
+von Claude Code an und loescht sie danach; der Mod erneuert daneben <id>.alive alle 15 s. Fehlt
+die PID-Datei (nachdem sie da war) oder ist .alive laenger als 90 s alt, enden alle. <id>.reframe
+schickt die Hilfsfelder fuer einen Neuaufbau weg; jedes meldet sich mit <id>.<rolle>.up an und ab.
+/deck intro beruehrt party-<id> wie im tmux-Rahmen. Den Tabtitel setzen alle auf "C64 <Projekt>
+[pid]", damit die Tafel den Tab findet, gleich welches Feld gerade vorn ist.
 """
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import time
 
@@ -63,18 +73,61 @@ def paint_crab(rows, top, left, bg=boot.SCREEN_BG):
 boot.paint_crab = paint_crab                  # auch fuer paint_pair, die Krabben Hand in Hand
 
 
+FELD = '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}'     # Profil "C64 Retro Deck Feld" im Fragment
+HEAD_ROWS = 9
+SIDE_COLS = 3.4                       # Anteile runden ab: so werden es drei Spalten, zwei Zeilen
+BOTTOM_ROWS = 2.4
+
+
+def arg(flag, n=1):
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + n < len(sys.argv):
+            return sys.argv[i + n]
+    return ''
+
+
 def frame_id():
-    if '--fill' in sys.argv:
-        i = sys.argv.index('--fill')
-        if i + 1 < len(sys.argv):
-            return sys.argv[i + 1]
+    for flag in ('--frame', '--head', '--fill'):
+        if arg(flag):
+            return arg(flag)
     return os.environ.get('C64_FRAME', '')
 
 
+def base_path(suffix):
+    return os.path.join(os.path.expanduser('~'), '.claude', 'retro-deck', frame_id() + suffix)
+
+
 def frame_files():
-    sock = frame_id()
-    base = os.path.join(os.path.expanduser('~'), '.claude', 'retro-deck', sock)
-    return base + '.pid', base + '.alive'
+    return base_path('.pid'), base_path('.alive')
+
+
+def mtime(path):
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return 0
+
+
+class Helper:
+    """Meldet ein Hilfsfeld an und ab; weg() wird wahr, wenn der Rahmen neu gebaut wird."""
+
+    def __init__(self, role):
+        self.up = base_path(f'.{role}.up')
+        self.started = time.time()
+        try:
+            open(self.up, 'w').close()
+        except OSError:
+            pass
+
+    def gone(self):
+        return mtime(base_path('.reframe')) > self.started
+
+    def close(self):
+        try:
+            os.remove(self.up)
+        except OSError:
+            pass
 
 
 def banner_rows(cols, top, rows):
@@ -117,23 +170,26 @@ def session_over(pid_path, alive_path, state):
 
 
 def fill():
-    """Ein Randfeld: ganz in Rahmenfarbe, bis die Sitzung endet."""
+    """Ein Randfeld: ganz in Rahmenfarbe, bis die Sitzung endet oder der Rahmen neu gebaut wird."""
     write = sys.stdout.write
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     pid_path, alive_path = frame_files()
     state = {'seen': False, 'titled': False, 'started': time.time()}
+    helper = Helper(arg('--fill', 2) or 'fill')
     write(f'\033]4;12;rgb:{LIGHT_BLUE}\007\033]11;rgb:{LIGHT_BLUE}\007' + HIDE)
     last = None
     try:
-        while not session_over(pid_path, alive_path, state):
+        while not session_over(pid_path, alive_path, state) and not helper.gone():
             cols, rows = shutil.get_terminal_size((3, 1))
             if (cols, rows) != last:
                 write(CLEAR + ''.join(at(r, 1) + BORDER_BG + ' ' * cols for r in range(1, rows + 1)) + RESET)
                 sys.stdout.flush()
                 last = (cols, rows)
-            time.sleep(0.5)
+            time.sleep(0.3)
     except (KeyboardInterrupt, SystemExit, BrokenPipeError):
         pass
+    finally:
+        helper.close()
 
 
 def main():
@@ -144,8 +200,9 @@ def main():
     logo_col = BORDER_COLS + 1
     text_col = logo_col + CRAB_W + 2
     dance_left = text_col + max(len(t) for t in LOGO_TEXT) + 3
-    pfile = party_file()
+    pfile = os.path.join(os.path.dirname(base_path('')), 'party-' + frame_id()) if frame_id() else party_file()
     seen_party = party_stamp(pfile)
+    helper = Helper('head')
 
     x, frame, direction = dance_left, 0, 1
     standing = 0
@@ -155,7 +212,7 @@ def main():
     write(f'\033]11;rgb:{LIGHT_BLUE}\007' + HIDE + CLEAR)
     try:
         while True:
-            if session_over(pid_path, alive_path, state):
+            if session_over(pid_path, alive_path, state) or helper.gone():
                 break
 
             stamp = party_stamp(pfile)
@@ -207,6 +264,7 @@ def main():
     except (KeyboardInterrupt, SystemExit, BrokenPipeError):
         pass
     finally:
+        helper.close()
         try:
             write(RESET + CLEAR + at(1, 1) + SHOW)
             sys.stdout.flush()
@@ -214,5 +272,128 @@ def main():
             pass
 
 
+def wt(*args):
+    try:
+        subprocess.run(['wt.exe', '-w', '0', *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def console_size():
+    """Groesse des Feldes von Claude Code: --frame laeuft an dessen Konsole."""
+    for fd in (1, 2, 0):
+        try:
+            return tuple(os.get_terminal_size(fd))
+        except (OSError, ValueError):
+            continue
+    return (0, 0)
+
+
+def share(x):
+    return f'{min(0.995, max(0.005, x)):.3f}'
+
+
+def wait_up(role, timeout=2.5):
+    """True, sobald das Hilfsfeld sich angemeldet hat (sonst lehnte Windows Terminal die Teilung ab)."""
+    end = time.time() + timeout
+    while time.time() < end:
+        if os.path.exists(base_path(f'.{role}.up')):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def build():
+    """Legt die Hilfsfelder um das Feld von Claude Code an, das dabei den Fokus behaelt."""
+    cols, rows = console_size()
+    if cols < 20 or rows < HEAD_ROWS + 6:
+        return
+    me = [sys.executable, os.path.abspath(__file__)]
+    here = ['-p', FELD, '-d', os.getcwd()]
+    fid = frame_id()
+    # Kopf: gross unten neu, dann nach oben getauscht; der Fokus wandert mit, zurueck nach unten.
+    wt('split-pane', '-H', '-s', share((rows - HEAD_ROWS) / rows), *here, *me, '--head', fid)
+    if wait_up('head'):
+        time.sleep(0.4)
+        wt('swap-pane', 'up')
+        time.sleep(0.4)
+        wt('move-focus', 'down')
+        time.sleep(0.6)
+    rows_below = rows - HEAD_ROWS
+    # Linker Rand: ebenso gross rechts neu, nach links getauscht.
+    wt('split-pane', '-V', '-s', share((cols - 3) / cols), *here, *me, '--fill', fid, 'left')
+    if wait_up('left'):
+        time.sleep(0.4)
+        wt('swap-pane', 'left')
+        time.sleep(0.4)
+        wt('move-focus', 'right')
+        time.sleep(0.6)
+    # Rechter Rand und unterer Rand: schmal neu, einzeln, mit Pause.
+    wt('split-pane', '-V', '-s', share(SIDE_COLS / (cols - 3)), *here, *me, '--fill', fid, 'right')
+    if wait_up('right'):
+        time.sleep(0.4)
+        wt('move-focus', 'left')
+        time.sleep(0.6)
+    wt('split-pane', '-H', '-s', share(BOTTOM_ROWS / rows_below), *here, *me, '--fill', fid, 'bottom')
+    if wait_up('bottom'):
+        time.sleep(0.4)
+        wt('move-focus', 'up')
+
+
+def frame():
+    """Baut den Rahmen, sobald das Feld von LOAD weg ist, und nach jeder Groessenaenderung neu."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)     # Strg+C gilt Claude Code, nicht diesem Helfer
+    pid_path, alive_path = frame_files()
+    state = {'seen': False, 'titled': True, 'started': time.time()}
+    roles = ('head', 'left', 'right', 'bottom')
+    # LOAD schliesst sein Feld 1,2 s nach dem Teilen; danach waechst dieses auf den ganzen Tab.
+    time.sleep(1.2)
+    size, stable = console_size(), time.time()
+    while time.time() - stable < 0.8 and time.time() - state['started'] < 6:
+        time.sleep(0.2)
+        if console_size() != size:
+            size, stable = console_size(), time.time()
+    build()
+    time.sleep(1.0)
+    size = console_size()
+    while not session_over(pid_path, alive_path, state):
+        time.sleep(0.5)
+        now = console_size()
+        if now == size:
+            continue
+        if now[0] == 0:                               # keine Konsole mehr: Tab zu, nichts mehr teilen
+            break
+        # Erst wenn die Groesse 1,5 s steht: Hilfsfelder weg, warten bis alle zu sind, neu bauen.
+        stable = time.time()
+        while time.time() - stable < 1.5:
+            time.sleep(0.3)
+            if console_size() != now:
+                now, stable = console_size(), time.time()
+        try:
+            with open(base_path('.reframe'), 'w') as f:
+                f.write(str(time.time()))
+        except OSError:
+            continue
+        end = time.time() + 5
+        while time.time() < end and any(os.path.exists(base_path(f'.{r}.up')) for r in roles):
+            time.sleep(0.2)
+        time.sleep(0.8)
+        if session_over(pid_path, alive_path, state):
+            break
+        build()
+        time.sleep(1.0)
+        size = console_size()
+    try:
+        os.remove(base_path('.reframe'))
+    except OSError:
+        pass
+
+
 if __name__ == '__main__':
-    fill() if '--fill' in sys.argv else main()
+    if '--frame' in sys.argv:
+        frame()
+    elif '--fill' in sys.argv:
+        fill()
+    else:
+        main()

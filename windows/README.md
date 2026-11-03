@@ -10,8 +10,9 @@ What it draws:
   hand in hand across it, and the C64 boot banner ("proudly presented by Alf", RETRO DECK,
   READY.). macOS and Linux build this frame with tmux; on Windows `LOAD` splits the Windows
   Terminal tab into the same fields instead: nine rows on top for the header and the banner, a
-  light blue edge left, right and below, Claude Code in the middle. When Claude Code ends, the
-  frame goes and the shell has the whole tab again.
+  light blue edge left, right and below, Claude Code in the middle. When the window changes size,
+  the frame rebuilds itself around Claude Code. When Claude Code ends, the frame goes and that
+  pane stays as a PowerShell with READY. as its prompt.
   `LOAD "*",8,1 FLACH` starts without the split; then the mod draws the header above the prompt
   (option `header`).
 - **The footer**: project, zoom (+)(-), model, context meter, cost, turns, the rate-limit windows
