@@ -25,9 +25,10 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import boot  # noqa: E402
 from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_S, HIDE,  # noqa: E402
                   LB, LOGO_TEXT, PAIR_W, PARTY, RESET, SHOW, STAND_S, WALK, WHITE,
-                  crab_rows, make_sky, mod_version, paint_crab, paint_pair, paint_sky,
+                  crab_rows, make_sky, mod_version, paint_pair, paint_sky,
                   party_file, party_stamp)
 
 BAND_ROWS = 3
@@ -39,6 +40,27 @@ LIGHT_BLUE = '70/6d/eb'
 # Das Banner fest im Bildschirmblau: das Feld oben stellt seinen Grund auf Rahmenfarbe, damit auch
 # der Innenabstand von Windows Terminal hellblau ist und keine dunkle Kante unter der Trennzeile bleibt.
 SCREEN = '\033[48;2;46;44;155m'
+EYE_BG = '\033[48;2;0;0;0m'
+
+
+def paint_crab(rows, top, left, bg=boot.SCREEN_BG):
+    """Wie boot.paint_crab, aber mit schwarzen Augen wie auf dem Mac. Dort zeichnet boot.py die
+    Krabbe fuer Terminal.app mit ausgesparten Augen auf Krabbenfarbe; hier sind die Augen die Luecken
+    in den Blockzeichen der Kopfzeile, die sonst den Grund durchscheinen lassen: Hellblau."""
+    out = []
+    for i, row in enumerate(rows):
+        out.append(at(top + i, left))
+        for text, cut in row:
+            if cut:
+                out.append(boot.BLACK + boot.LRED_BG + text)
+                continue
+            for j, ch in enumerate(text):     # Kopfzeile: Spalte 1 ist der Arm, ab 2 die Augenpartie
+                out.append(boot.LRED + (EYE_BG if i == 0 and 2 <= j <= 7 and ch in '▛▟' else bg) + ch)
+        out.append(RESET + bg)
+    return ''.join(out)
+
+
+boot.paint_crab = paint_crab                  # auch fuer paint_pair, die Krabben Hand in Hand
 
 
 def frame_id():

@@ -135,21 +135,26 @@ function global:LOAD {
     $cwd = (Get-Location).Path
     $fill = @($exe) + $pre + @((Join-Path $C64Dir 'head.py'), '--fill', $id)
     $claude = @('powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $b64)
-    # Unter diesem Feld (9 Zeilen Kopfleiste) der linke Rand; davon rechts claude; davon rechts der
-    # rechte Rand; zurueck zu claude, darunter der untere Rand; Fokus wieder auf claude.
-    # Die neuen Felder nehmen das versteckte Profil "C64 Retro Deck Feld" aus dem Fragment: ohne
-    # Innenabstand und Scrollbalken, sonst bleibt von 3 Spalten Rand keine einzige Zeichenzelle, und
-    # Windows Terminal verweigert die Teilung ganz. Dieses Feld oben behaelt seinen Innenabstand (fast
-    # eine Zeile), darum bekommt es Platz fuer gut 10 Zeilen; was ueber 9 hinausgeht, ist Rahmenfarbe.
+    # Windows Terminal setzt ein neues Feld immer rechts oder unten an und lehnt ein zu schmales neues
+    # Feld ab (so fehlten rechter und unterer Rand); das schmale Feld muss also das alte sein. Darum:
+    # unter diesem Feld (9 Zeilen Kopfleiste) ein Randfeld; davon rechts ein zweites, das alte bleibt
+    # als linker Rand; davon rechts ein drittes, das alte bleibt als rechter Rand, und swap-pane tauscht
+    # beide; unter dem mittleren Claude Code, das alte oben bleibt als unterer Rand, swap-pane tauscht.
+    # Der Fokus bleibt bei dem Feld, das getauscht wird, und landet so auf Claude Code.
+    # Die neuen Felder nehmen das versteckte Profil "C64 Retro Deck Feld" aus dem Fragment (ohne
+    # Innenabstand und Scrollbalken), damit die Anteile in Zeichen aufgehen. Dieses Feld oben behaelt
+    # seinen Innenabstand (fast eine Zeile) und bekommt Platz fuer gut 10 Zeilen; der Rest ist Rahmenfarbe.
     $feld = @('-p', '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}', '-d', $cwd)
     $top = 10.2
+    $inner = $cols - 3.3
+    $low = $rows - $top
     $plan = @('-w', '0',
-      'split-pane', '-H', '-s', (& $share (($rows - $top) / $rows))) + $feld + $fill + @(';',
-      'split-pane', '-V', '-s', (& $share (($cols - 3.3) / $cols))) + $feld + $claude + @(';',
-      'split-pane', '-V', '-s', (& $share (3.4 / ($cols - 3)))) + $feld + $fill + @(';',
-      'move-focus', 'left', ';',
-      'split-pane', '-H', '-s', (& $share (1.5 / ($rows - $top)))) + $feld + $fill + @(';',
-      'move-focus', 'up')
+      'split-pane', '-H', '-s', (& $share ($low / $rows))) + $feld + $fill + @(';',
+      'split-pane', '-V', '-s', (& $share ($inner / $cols))) + $feld + $fill + @(';',
+      'split-pane', '-V', '-s', (& $share (($inner - 3.4) / $inner))) + $feld + $fill + @(';',
+      'swap-pane', 'left', ';',
+      'split-pane', '-H', '-s', (& $share (($low - 1.5) / $low))) + $feld + $claude + @(';',
+      'swap-pane', 'up')
     & $wt.Source @plan
     $env:C64_FRAME = $id
     $env:PYTHONUTF8 = '1'
