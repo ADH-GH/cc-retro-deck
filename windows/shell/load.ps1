@@ -56,8 +56,14 @@ function global:C64-Python {
     $cmd = Get-Command $cand[0] -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $cmd) { continue }
     $pre = @($cand | Select-Object -Skip 1)
-    & $cmd.Source @pre -c 'import sys; sys.exit(0)' 2>$null
-    if ($LASTEXITCODE -eq 0) { return (@($cmd.Source) + $pre) -join '|' }
+    # Den echten Interpreter zurueckgeben, nicht py.exe: der Launcher erkennt -3 nur ohne
+    # Anfuehrungszeichen, Start-Process setzt sie aber, und Python bricht dann mit "Unknown option" ab.
+    # Ganz auslesen: Select-Object -First 1 im Fluss bricht den Prozess ab und verfaelscht $LASTEXITCODE.
+    try { $out = @(& $cmd.Source @pre -c 'import sys; print(sys.executable)' 2>$null) } catch { continue }
+    if ($LASTEXITCODE -ne 0) { continue }
+    $real = [string]($out | Select-Object -First 1)
+    if ($real -and (Test-Path -LiteralPath $real)) { return $real }
+    return (@($cmd.Source) + $pre) -join '|'
   }
   return ''
 }
@@ -86,7 +92,9 @@ function global:C64-Run([string]$look, [string]$id, [string]$py, [string[]]$pass
     $exe, $pre = $py -split '\|'
     $argv = @($pre | Where-Object { $_ }) + @((Join-Path $C64Dir 'head.py'), '--frame', $id)
     $env:PYTHONUTF8 = '1'
-    Start-Process -FilePath $exe -ArgumentList (($argv | ForEach-Object { '"' + $_ + '"' }) -join ' ') `
+    # Anfuehrungszeichen nur, wo Leerzeichen sind: py.exe nimmt "-3" sonst nicht als Schalter.
+    $quoted = $argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
+    Start-Process -FilePath $exe -ArgumentList ($quoted -join ' ') `
       -NoNewWindow -WorkingDirectory (Get-Location).Path | Out-Null
   }
   $env:C64_FRAME = $id

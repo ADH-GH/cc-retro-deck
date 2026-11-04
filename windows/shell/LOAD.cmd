@@ -16,5 +16,6 @@ shift
 goto next
 :run
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ". (Join-Path $HOME '.claude\retro-deck\shell\load.ps1'); LOAD '*,8,1' '__CMD__'!rest!"
-if errorlevel 64 exit
+rem exit 0, nicht exit: das gaebe 64 weiter, und Windows Terminal schliesst ein Feld nur bei 0.
+if errorlevel 64 exit 0
 endlocal & prompt $_$E[94mREADY.$E[0m$_
