@@ -19,7 +19,7 @@
 # Felder teilen, nur nicht nachtraeglich auf eine Groesse setzen. Darum startet LOAD Claude Code in
 # einem neuen Feld und schliesst sein eigenes; im neuen Feld legt head.py --frame dieselben Felder
 # an wie frame.sh (oben neun Zeilen Kopfleiste, links und rechts drei Spalten, unten zwei Zeilen
-# Rahmenfarbe) und baut sie nach jeder Groessenaenderung des Fensters neu. Endet Claude Code,
+# Rahmenfarbe), einmal; bei Groessenaenderung verteilt Windows Terminal sie anteilig. Endet Claude Code,
 # schliessen sich die Hilfsfelder, und das Feld bleibt als PowerShell mit READY. als Prompt.
 # Ohne Windows Terminal oder ohne Python: FLACH.
 # Die Farben setzt LOAD per Steuersequenz (OSC 4/10/11/12) je Feld; Windows Terminal versteht das.
@@ -75,8 +75,8 @@ function global:C64-Project {
 }
 
 # Claude Code im Rahmen: dieses Feld bleibt, Kopfleiste und Raender sind Hilfsfelder darum, die
-# head.py --frame (im Hintergrund, an derselben Konsole) anlegt und bei jeder Groessenaenderung neu
-# aufbaut. Farben, Tabtitel mit der PID dieser PowerShell, und ~/.claude/retro-deck/<id>.pid, an
+# head.py --frame (im Hintergrund, an derselben Konsole) einmal anlegt; sie bleiben bis zum Ende
+# stehen. Farben, Tabtitel mit der PID dieser PowerShell, und ~/.claude/retro-deck/<id>.pid, an
 # der die Hilfsfelder sehen, dass die Sitzung laeuft. Endet Claude Code, schliessen sie sich, und
 # dieses Feld hat den Tab mit READY. als Prompt.
 function global:C64-Run([string]$look, [string]$id, [string]$py, [string[]]$pass) {

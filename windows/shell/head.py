@@ -4,11 +4,11 @@
 Auf macOS und Linux legt tmux Felder um Claude Code (frame.sh, boot.py --band und --banner).
 Windows hat kein tmux; dort teilt Windows Terminal den Tab in Felder, kann sie aber nicht
 nachtraeglich auf eine Groesse setzen und verteilt sie bei Groessenaenderung anteilig. Darum
-laeuft Claude Code in einem Feld, das bleibt, und alles darum sind Hilfsfelder, die sich bei jeder
-Groessenaenderung schliessen und in der richtigen Groesse neu entstehen:
+laeuft Claude Code in einem Feld, das bleibt, und alles darum sind Hilfsfelder, die einmal in der
+richtigen Groesse entstehen und dann bis zum Ende stehen bleiben:
 
     head.py --frame <id>         im Hintergrund an der Konsole von Claude Code (C64-Run): legt die
-                                 Felder an, beobachtet die Groesse, baut neu
+                                 Felder an, sobald die Groesse steht
     head.py --head <id>          oben: drei Zeilen Kopfleiste (Logo, Himmel, zwei Krabben Hand in
                                  Hand), Trennzeile, vier Zeilen Banner, Trennzeile
     head.py --fill <id> <rolle>  links, rechts (drei Spalten), unten (zwei Zeilen): Rahmenfarbe
@@ -20,10 +20,17 @@ schmal nur, wenn es einzeln mit Pause angelegt wird und das geteilte Feld keinen
 Felder, die Groessen bleiben am Platz, der Fokus wandert mit dem Inhalt. Kopf und linker Rand
 entstehen darum gross rechts oder unten und werden an ihren Platz getauscht.
 
+Kein Neuaufbau bei Groessenaenderung (seit beta.16): Schliesst ein Feld, dessen Inhalt per swap-pane
+getauscht wurde, stuerzt Windows Terminal 1.24 bei der naechsten Groessenaenderung ab (TerminalApp.dll,
+0xc0000005) und nimmt alle Fenster mit; Zuruecktauschen vor dem Schliessen hilft nicht verlaesslich.
+Die Felder bleiben darum stehen. Windows Terminal verteilt sie anteilig: im kleineren Fenster werden
+Kopf und Raender schmaler (die Kopfleiste zeigt dann nur so viele Zeilen, wie Platz ist), und in der
+Groesse vom Aufbau, etwa wieder maximiert, stimmt der Rahmen wieder genau.
+
 Das Ende erkennt jedes Teil an ~/.claude/retro-deck/<id>.pid: C64-Run legt die Datei beim Start
 von Claude Code an und loescht sie danach; der Mod erneuert daneben <id>.alive alle 15 s. Fehlt
-die PID-Datei (nachdem sie da war) oder ist .alive laenger als 90 s alt, enden alle. <id>.reframe
-schickt die Hilfsfelder fuer einen Neuaufbau weg; jedes meldet sich mit <id>.<rolle>.up an und ab.
+die PID-Datei (nachdem sie da war) oder ist .alive laenger als 90 s alt, enden alle. Jedes
+Hilfsfeld meldet sich mit <id>.<rolle>.up an und ab.
 /deck intro beruehrt party-<id> wie im tmux-Rahmen. Den Tabtitel setzen alle auf "C64 <Projekt>
 [pid]", damit die Tafel den Tab findet, gleich welches Feld gerade vorn ist.
 """
@@ -44,7 +51,7 @@ from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_
 BAND_ROWS = 3
 BANNER_TOP = BAND_ROWS + 2            # eine Trennzeile zwischen Kopfleiste und Banner
 STALE_S = 90
-VERSION = '0.12.1-beta.15'                         # mit plugin.json hochzaehlen
+VERSION = '0.12.1-beta.16'                         # mit plugin.json hochzaehlen
 # Colodore: Rahmenfarbe Hellblau auf ANSI 12, wie load.ps1 sie setzt. Ein Randfeld startet Windows
 # Terminal mit seinem eigenen Farbschema; das Feld setzt sich die Farbe darum selbst.
 LIGHT_BLUE = '70/6d/eb'
@@ -103,27 +110,16 @@ def frame_files():
     return base_path('.pid'), base_path('.alive')
 
 
-def mtime(path):
-    try:
-        return os.stat(path).st_mtime
-    except OSError:
-        return 0
-
-
 class Helper:
-    """Meldet ein Hilfsfeld an und ab; weg() wird wahr, wenn der Rahmen neu gebaut wird."""
+    """Meldet ein Hilfsfeld an und ab: der Framer wartet auf die Anmeldung, bevor er weiterteilt."""
 
     def __init__(self, role):
         self.up = base_path(f'.{role}.up')
-        self.started = time.time()
         log(f'{role} up {console_size()}')
         try:
             open(self.up, 'w').close()
         except OSError:
             pass
-
-    def gone(self):
-        return mtime(base_path('.reframe')) > self.started
 
     def close(self):
         try:
@@ -172,7 +168,7 @@ def session_over(pid_path, alive_path, state):
 
 
 def fill():
-    """Ein Randfeld: ganz in Rahmenfarbe, bis die Sitzung endet oder der Rahmen neu gebaut wird."""
+    """Ein Randfeld: ganz in Rahmenfarbe, bis die Sitzung endet."""
     write = sys.stdout.write
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     pid_path, alive_path = frame_files()
@@ -181,7 +177,7 @@ def fill():
     write(f'\033]4;12;rgb:{LIGHT_BLUE}\007\033]11;rgb:{LIGHT_BLUE}\007' + HIDE)
     last = None
     try:
-        while not session_over(pid_path, alive_path, state) and not helper.gone():
+        while not session_over(pid_path, alive_path, state):
             cols, rows = shutil.get_terminal_size((3, 1))
             if (cols, rows) != last:
                 write(CLEAR + ''.join(at(r, 1) + BORDER_BG + ' ' * cols for r in range(1, rows + 1)) + RESET)
@@ -214,7 +210,7 @@ def main():
     write(f'\033]11;rgb:{LIGHT_BLUE}\007' + HIDE + CLEAR)
     try:
         while True:
-            if session_over(pid_path, alive_path, state) or helper.gone():
+            if session_over(pid_path, alive_path, state):
                 break
 
             stamp = party_stamp(pfile)
@@ -386,56 +382,21 @@ def build():
 
 
 def frame():
-    """Baut den Rahmen, sobald das Feld von LOAD weg ist, und nach jeder Groessenaenderung neu."""
+    """Baut den Rahmen einmal, sobald das Feld von LOAD weg ist; danach bleiben die Felder stehen
+    (kein Neuaufbau bei Groessenaenderung, siehe oben) und enden selbst mit der Sitzung."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)     # Strg+C gilt Claude Code, nicht diesem Helfer
-    pid_path, alive_path = frame_files()
-    state = {'seen': False, 'titled': True, 'started': time.time()}
-    roles = ('head', 'left', 'right', 'bottom')
+    started = time.time()
     log(f'frame {VERSION} python {sys.version.split()[0]} wt {shutil.which("wt.exe") or "-"} '
         f'cwd {os.getcwd()} fds {[os.isatty(fd) for fd in (0, 1, 2)]} size {console_size()}')
     # LOAD schliesst sein Feld 1,2 s nach dem Teilen; danach waechst dieses auf den ganzen Tab.
     time.sleep(1.2)
     size, stable = console_size(), time.time()
-    while time.time() - stable < 0.8 and time.time() - state['started'] < 6:
+    while time.time() - stable < 0.8 and time.time() - started < 6:
         time.sleep(0.2)
         if console_size() != size:
             size, stable = console_size(), time.time()
     build()
-    time.sleep(1.0)
-    size = console_size()
-    while not session_over(pid_path, alive_path, state):
-        time.sleep(0.5)
-        now = console_size()
-        if now == size:
-            continue
-        if now[0] == 0:                               # keine Konsole mehr: Tab zu, nichts mehr teilen
-            log('console gone')
-            break
-        log(f'resize {size} -> {now}')
-        # Erst wenn die Groesse 1,5 s steht: Hilfsfelder weg, warten bis alle zu sind, neu bauen.
-        stable = time.time()
-        while time.time() - stable < 1.5:
-            time.sleep(0.3)
-            if console_size() != now:
-                now, stable = console_size(), time.time()
-        try:
-            with open(base_path('.reframe'), 'w') as f:
-                f.write(str(time.time()))
-        except OSError:
-            continue
-        end = time.time() + 5
-        while time.time() < end and any(os.path.exists(base_path(f'.{r}.up')) for r in roles):
-            time.sleep(0.2)
-        time.sleep(0.8)
-        if session_over(pid_path, alive_path, state):
-            break
-        build()
-        time.sleep(1.0)
-        size = console_size()
-    try:
-        os.remove(base_path('.reframe'))
-    except OSError:
-        pass
+    log('frame built, framer done')
 
 
 if __name__ == '__main__':

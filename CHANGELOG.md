@@ -3,6 +3,21 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.1-beta.16] — 2026-11-04 — Windows
+
+### Geaendert
+- Kein Neuaufbau des Rahmens mehr bei Groessenaenderung. Gemessen mit einem portablen Windows
+  Terminal 1.24.12741 im eigenen Prozess: Schliesst ein Feld, dessen Inhalt per `swap-pane`
+  getauscht wurde (Kopfleiste, linker Rand), stuerzt Windows Terminal bei der naechsten
+  Groessenaenderung ab (`TerminalApp.dll`, `0xc0000005`) und reisst alle Fenster mit, auch
+  fremde Tabs. Ohne Claude Code und ohne Ausgabe der Hilfsfelder ebenso. Zuruecktauschen vor dem
+  Schliessen hilft nicht verlaesslich; nur die ungetauschten Felder neu bauen laesst Geisterfelder
+  stehen und verliert den Fokus. Die Felder bleiben jetzt stehen, Windows Terminal verteilt sie
+  anteilig: im kleineren Fenster werden Kopf und Raender schmaler, wieder maximiert stimmt der
+  Rahmen genau. Sieben Groessenwechsel hintereinander ohne Absturz.
+- `head.py --frame` beendet sich nach dem Aufbau; das Ende der Sitzung erkennen die Hilfsfelder
+  selbst. `<id>.reframe` entfaellt.
+
 ## [0.12.1-beta.15] — 2026-11-04 — Windows
 
 ### Behoben
