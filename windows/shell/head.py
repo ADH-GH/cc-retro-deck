@@ -44,6 +44,7 @@ from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_
 BAND_ROWS = 3
 BANNER_TOP = BAND_ROWS + 2            # eine Trennzeile zwischen Kopfleiste und Banner
 STALE_S = 90
+VERSION = '0.12.1-beta.14'                         # mit plugin.json hochzaehlen
 # Colodore: Rahmenfarbe Hellblau auf ANSI 12, wie load.ps1 sie setzt. Ein Randfeld startet Windows
 # Terminal mit seinem eigenen Farbschema; das Feld setzt sich die Farbe darum selbst.
 LIGHT_BLUE = '70/6d/eb'
@@ -115,6 +116,7 @@ class Helper:
     def __init__(self, role):
         self.up = base_path(f'.{role}.up')
         self.started = time.time()
+        log(f'{role} up {console_size()}')
         try:
             open(self.up, 'w').close()
         except OSError:
@@ -272,22 +274,61 @@ def main():
             pass
 
 
+def log(msg):
+    """~/.claude/retro-deck/<id>.log: was der Rahmen tat; zum Einsenden, wenn er ausbleibt."""
+    try:
+        with open(base_path('.log'), 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%H:%M:%S")} {msg}\n')
+    except OSError:
+        pass
+
+
 def wt(*args):
     try:
-        subprocess.run(['wt.exe', '-w', '0', *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL, timeout=15)
-    except (OSError, subprocess.SubprocessError):
-        pass
+        r = subprocess.run(['wt.exe', '-w', '0', *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=15)
+        log(f'wt {" ".join(a for a in args[:6])} -> {r.returncode}')
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f'wt {args[0]} failed: {e}')
+
+
+def conout_size():
+    """Fensterflaeche der Konsole ueber CONOUT$: gilt auch, wenn Start-Process die Standardkanaele
+    nicht als Konsole weitergab (os.get_terminal_size kennt unter Windows nur fd 0 bis 2)."""
+    if os.name != 'nt':
+        return (0, 0)
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.WinDLL('kernel32', use_last_error=True)
+        k.CreateFileW.restype = wintypes.HANDLE
+        h = k.CreateFileW('CONOUT$', 0xC0000000, 3, None, 3, 0, None)
+        if not h or h == wintypes.HANDLE(-1).value:
+            return (0, 0)
+
+        class Info(ctypes.Structure):
+            _fields_ = [('size', wintypes._COORD), ('cursor', wintypes._COORD), ('attr', wintypes.WORD),
+                        ('win', wintypes.SMALL_RECT), ('max', wintypes._COORD)]
+        info = Info()
+        ok = k.GetConsoleScreenBufferInfo(h, ctypes.byref(info))
+        k.CloseHandle(h)
+        if not ok:
+            return (0, 0)
+        return (info.win.Right - info.win.Left + 1, info.win.Bottom - info.win.Top + 1)
+    except Exception:
+        return (0, 0)
 
 
 def console_size():
     """Groesse des Feldes von Claude Code: --frame laeuft an dessen Konsole."""
     for fd in (1, 2, 0):
         try:
-            return tuple(os.get_terminal_size(fd))
+            size = tuple(os.get_terminal_size(fd))
+            if size[0] > 0:
+                return size
         except (OSError, ValueError):
             continue
-    return (0, 0)
+    return conout_size()
 
 
 def share(x):
@@ -301,13 +342,16 @@ def wait_up(role, timeout=2.5):
         if os.path.exists(base_path(f'.{role}.up')):
             return True
         time.sleep(0.1)
+    log(f'{role} did not come up')
     return False
 
 
 def build():
     """Legt die Hilfsfelder um das Feld von Claude Code an, das dabei den Fokus behaelt."""
     cols, rows = console_size()
+    log(f'build {cols}x{rows}')
     if cols < 20 or rows < HEAD_ROWS + 6:
+        log('too small or no console size: no frame')
         return
     me = [sys.executable, os.path.abspath(__file__)]
     here = ['-p', FELD, '-d', os.getcwd()]
@@ -347,6 +391,8 @@ def frame():
     pid_path, alive_path = frame_files()
     state = {'seen': False, 'titled': True, 'started': time.time()}
     roles = ('head', 'left', 'right', 'bottom')
+    log(f'frame {VERSION} python {sys.version.split()[0]} wt {shutil.which("wt.exe") or "-"} '
+        f'cwd {os.getcwd()} fds {[os.isatty(fd) for fd in (0, 1, 2)]} size {console_size()}')
     # LOAD schliesst sein Feld 1,2 s nach dem Teilen; danach waechst dieses auf den ganzen Tab.
     time.sleep(1.2)
     size, stable = console_size(), time.time()
@@ -363,7 +409,9 @@ def frame():
         if now == size:
             continue
         if now[0] == 0:                               # keine Konsole mehr: Tab zu, nichts mehr teilen
+            log('console gone')
             break
+        log(f'resize {size} -> {now}')
         # Erst wenn die Groesse 1,5 s steht: Hilfsfelder weg, warten bis alle zu sind, neu bauen.
         stable = time.time()
         while time.time() - stable < 1.5:

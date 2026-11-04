@@ -81,6 +81,7 @@ function global:C64-Run([string]$look, [string]$id, [string]$py, [string[]]$pass
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $pidFile = Join-Path $dir "$id.pid"
   Set-Content -Path $pidFile -Value $PID -Encoding ASCII
+  Add-Content -Path (Join-Path $dir "$id.log") -Value "$(Get-Date -Format HH:mm:ss) C64-Run $id python '$py'" -ErrorAction SilentlyContinue
   if ($py) {
     $exe, $pre = $py -split '\|'
     $argv = @($pre | Where-Object { $_ }) + @((Join-Path $C64Dir 'head.py'), '--frame', $id)
