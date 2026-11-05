@@ -3,6 +3,21 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.1-beta.17] — 2026-11-05 — Windows
+
+### Behoben
+- Aus Windows PowerShell 5.1 blieb das PowerShell-Feld ueber dem Rahmen stehen. Der Profilblock steht
+  nur im Profil von PowerShell 7, in 5.1 ist `LOAD` darum `LOAD.cmd`, ein Kindprozess, der seine Shell
+  nicht beenden kann. `load.ps1` erkennt jetzt eine PowerShell ueber `LOAD.cmd` und legt Esc,
+  `exit 0` und Enter in den Eingabepuffer der gemeinsamen Konsole (`WriteConsoleInputW`). Die
+  PowerShell liest das nach `LOAD.cmd`, endet mit 0, und Windows Terminal schliesst ihr Feld. Aus
+  cmd aendert sich nichts.
+
+### Bekannt
+- Die Linien zwischen den Feldern bleiben: Windows Terminal zeichnet je 3 px unfokussierten Rand
+  (fest `#2E2E2E` bzw. `#E8E8E8` im hellen Design) und 3 px in der Windows-Akzentfarbe am Feld mit
+  dem Fokus. Dafuer gibt es keine Einstellung, auch nicht in 1.25.
+
 ## [0.12.1-beta.16] — 2026-11-04 — Windows
 
 ### Geaendert

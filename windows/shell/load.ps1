@@ -106,6 +106,46 @@ function global:C64-Run([string]$look, [string]$id, [string]$py, [string[]]$pass
   }
 }
 
+# LOAD.cmd aus einer PowerShell ohne unseren Profilblock (etwa Windows PowerShell 5.1): LOAD.cmd
+# laeuft dann als Kind und kann die PowerShell darueber nicht beenden, ihr Feld bliebe ueber dem
+# Rahmen stehen. Darum Esc, "exit 0" und Enter in den Eingabepuffer der gemeinsamen Konsole; die
+# PowerShell liest das, sobald LOAD.cmd fertig ist, und endet mit 0 (Windows Terminal schliesst ein
+# Feld nur bei 0). Aus cmd direkt aufgerufen ist der Elternteil von LOAD.cmd keine Shell: nichts zu tun.
+function global:C64-ExitParentShell {
+  try {
+    $cmdPid = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
+    $cmdProc = Get-CimInstance Win32_Process -Filter "ProcessId=$cmdPid"
+    if ($cmdProc.Name -ne 'cmd.exe') { return }
+    $shell = Get-CimInstance Win32_Process -Filter "ProcessId=$($cmdProc.ParentProcessId)"
+    if ($shell.Name -notin @('powershell.exe', 'pwsh.exe')) { return }
+    if (-not ('C64Input' -as [type])) {
+      Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class C64Input {
+  [StructLayout(LayoutKind.Explicit, CharSet = CharSet.Unicode)]
+  struct Rec { [FieldOffset(0)] public ushort Type; [FieldOffset(4)] public int Down; [FieldOffset(8)] public ushort Repeat;
+               [FieldOffset(10)] public ushort Vk; [FieldOffset(12)] public ushort Scan; [FieldOffset(14)] public char Ch;
+               [FieldOffset(16)] public uint State; }
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int n);
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  static extern bool WriteConsoleInputW(IntPtr h, Rec[] r, int n, out int written);
+  public static bool Type(string keys) {
+    var recs = new Rec[keys.Length * 2];
+    for (int i = 0; i < keys.Length; i++) {
+      char c = keys[i];
+      ushort vk = c == '\r' ? (ushort)0x0D : c == (char)27 ? (ushort)0x1B : (ushort)0;
+      recs[2 * i] = new Rec { Type = 1, Down = 1, Repeat = 1, Vk = vk, Ch = c };
+      recs[2 * i + 1] = new Rec { Type = 1, Down = 0, Repeat = 1, Vk = vk, Ch = c };
+    }
+    int w; return WriteConsoleInputW(GetStdHandle(-10), recs, recs.Length, out w);
+  }
+}
+'@
+    }
+    [void][C64Input]::Type("$([char]27)exit 0`r")
+  } catch { }
+}
+
 function global:LOAD {
   $look = 'screen'; $fast = $false; $flat = $false; $viaCmd = $false; $pass = @()
   foreach ($a in $args) {
@@ -159,6 +199,7 @@ function global:LOAD {
                      '-d', (Get-Location).Path) + $claude)
     # cmd schliesst LOAD.cmd bei Rueckgabe 64; eine PowerShell schliesst hier selbst (0 = Feld zu).
     # Erst wenn das neue Feld steht: als letztes Feld schloesse dieses sonst den ganzen Tab.
+    if ($viaCmd) { C64-ExitParentShell }
     Start-Sleep -Milliseconds 1200
     [Environment]::Exit($(if ($viaCmd) { 64 } else { 0 }))
     return
