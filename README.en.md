@@ -15,7 +15,7 @@ no affiliation or endorsement implied.*
 |---|---|---|
 | macOS | `cc-retro-deck-mac` | Terminal.app |
 | Linux (tested target: Mint 22) | `cc-retro-deck-linux` | GNOME Terminal |
-| Windows | coming later | |
+| Windows 10/11 | `cc-retro-deck-windows` | Windows Terminal (cmd or PowerShell) |
 
 Install exactly one: the edition for your system. Claude Code has no way to pick it for you.
 
@@ -31,7 +31,8 @@ Standard works right after installing the plugin. Retro Deck needs the one-time 
 ## Install
 
 **Requirements.** Standard needs only Claude Code 2.1.312 or later. Retro Deck also needs
-`tmux` and `python3`:
+`tmux` and `python3` (Windows: Windows Terminal and Python, no tmux — see
+[windows/README.md](windows/README.md)):
 
 | | check | macOS | Linux (Mint/Ubuntu) |
 |---|---|---|---|
@@ -53,6 +54,7 @@ claude plugin marketplace add ADH-GH/cc-retro-deck
 ```bash
 claude plugin install cc-retro-deck-mac@cc-retro-deck      # macOS
 claude plugin install cc-retro-deck-linux@cc-retro-deck    # Linux
+claude plugin install cc-retro-deck-windows@cc-retro-deck  # Windows
 ```
 
 Claude Code may note that the plugin's options are not set yet: they are optional, the
@@ -72,6 +74,8 @@ What `apply` does:
   `# >>> cc-retro-deck >>>` and `# <<< cc-retro-deck <<<`; it defines `LOAD` and `RUN`
 - macOS only: imports the Terminal profiles "C64" and "C64 Rahmen"
 - tells you if `tmux` is missing
+- Windows: `LOAD.cmd` and `SYS.cmd` on the PATH, a block in the PowerShell profiles, and the
+  Windows Terminal profile "C64 Retro Deck"; details in [windows/README.md](windows/README.md)
 
 Open a new terminal tab and type `LOAD "*",8,1`.
 
@@ -99,7 +103,7 @@ Settings (theme, auto-switch, deck at start, intro): `/plugin` → the plugin �
 **Disable, keep installed:**
 
 ```bash
-claude plugin disable cc-retro-deck-mac@cc-retro-deck      # Linux: cc-retro-deck-linux@cc-retro-deck
+claude plugin disable cc-retro-deck-mac@cc-retro-deck      # Linux/Windows: cc-retro-deck-linux / cc-retro-deck-windows
 ```
 
 From the next session on, Claude Code looks as shipped. Back with `claude plugin enable …`.
@@ -121,7 +125,7 @@ profiles (macOS) and `~/.claude/retro-deck/`.
 **2. Remove the plugin and the marketplace:**
 
 ```bash
-claude plugin uninstall cc-retro-deck-mac@cc-retro-deck    # Linux: cc-retro-deck-linux@cc-retro-deck
+claude plugin uninstall cc-retro-deck-mac@cc-retro-deck    # Linux/Windows: cc-retro-deck-linux / cc-retro-deck-windows
 claude plugin marketplace remove cc-retro-deck
 ```
 
@@ -129,6 +133,8 @@ Check: `claude plugin list` no longer lists it, a new tab shows your usual promp
 unknown.
 
 ### By hand, if the plugin is already gone
+
+macOS and Linux below; Windows: [windows/README.md](windows/README.md).
 
 ```bash
 # end running frames (macOS: one tmux server per tab; Linux: one shared server)

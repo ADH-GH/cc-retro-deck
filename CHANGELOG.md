@@ -3,7 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
-## [0.12.1] — 2026-11-03
+## [0.12.1] — 2026-11-05
+
+### Added
+- `cc-retro-deck-windows` (Windows 10/11, Windows Terminal with cmd or PowerShell): footer, task
+  deck with jumps between Windows Terminal tabs, `/deck setup` and `/deck uninstall`, and
+  `LOAD "*",8,1` with the boot screen and a frame of Windows Terminal panes around Claude Code
+  (crab header and banner on top, light blue edges). Windows Terminal cannot size panes, so the
+  frame scales with the window and is exact again at the size it was built in.
 
 ### Fixed
 - After a minute without input the footer turned to a red `ASK idle_prompt`: Claude Code's
