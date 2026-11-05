@@ -3,67 +3,6 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
-## [0.12.1-beta.18] — 2026-11-05 — Windows
-
-### Behoben
-- **Absturz nach dem Ende:** Endete Claude Code, schlossen sich auch die getauschten Felder (Kopfleiste,
-  linker Rand), und die naechste Groessenaenderung riss Windows Terminal mit allen Fenstern ab. Der
-  Rahmen entsteht jetzt ganz ohne `swap-pane` (`C64-Frame` in `load.ps1`): Das Feld von LOAD teilt
-  unten den linken Rand ab, der rechts das Feld von Claude Code, und dieses rechts und unten die
-  uebrigen Raender. Das LOAD-Feld zeigt danach selbst die Kopfleiste (`head.py --head` im
-  Vordergrund) und schliesst sich mit der Sitzung. Gemessen: Groessenaenderung vor und nach dem Ende
-  ohne Absturz.
-- **Kein Rahmen aus cmd im Startmenue:** Gibt Windows eine aussen gestartete Konsole an Windows
-  Terminal weiter (Standardterminal), fehlt `WT_SESSION`, und LOAD lief ohne Rahmen. `C64-InWT`
-  erkennt Windows Terminal jetzt auch am Besitzer des Konsolenfensters.
-- Kein Rahmen? `~/.claude/retro-deck/load.log` sagt warum.
-
-### Geaendert
-- `head.py --frame` entfaellt; `head.py` zeichnet nur noch Kopfleiste und Raender.
-
-## [0.12.1-beta.17] — 2026-11-05 — Windows
-
-### Behoben
-- Aus Windows PowerShell 5.1 blieb das PowerShell-Feld ueber dem Rahmen stehen. Der Profilblock steht
-  nur im Profil von PowerShell 7, in 5.1 ist `LOAD` darum `LOAD.cmd`, ein Kindprozess, der seine Shell
-  nicht beenden kann. `load.ps1` erkennt jetzt eine PowerShell ueber `LOAD.cmd` und legt Esc,
-  `exit 0` und Enter in den Eingabepuffer der gemeinsamen Konsole (`WriteConsoleInputW`). Die
-  PowerShell liest das nach `LOAD.cmd`, endet mit 0, und Windows Terminal schliesst ihr Feld. Aus
-  cmd aendert sich nichts.
-
-### Bekannt
-- Die Linien zwischen den Feldern bleiben: Windows Terminal zeichnet je 3 px unfokussierten Rand
-  (fest `#2E2E2E` bzw. `#E8E8E8` im hellen Design) und 3 px in der Windows-Akzentfarbe am Feld mit
-  dem Fokus. Dafuer gibt es keine Einstellung, auch nicht in 1.25.
-
-## [0.12.1-beta.16] — 2026-11-04 — Windows
-
-### Geaendert
-- Kein Neuaufbau des Rahmens mehr bei Groessenaenderung. Gemessen mit einem portablen Windows
-  Terminal 1.24.12741 im eigenen Prozess: Schliesst ein Feld, dessen Inhalt per `swap-pane`
-  getauscht wurde (Kopfleiste, linker Rand), stuerzt Windows Terminal bei der naechsten
-  Groessenaenderung ab (`TerminalApp.dll`, `0xc0000005`) und reisst alle Fenster mit, auch
-  fremde Tabs. Ohne Claude Code und ohne Ausgabe der Hilfsfelder ebenso. Zuruecktauschen vor dem
-  Schliessen hilft nicht verlaesslich; nur die ungetauschten Felder neu bauen laesst Geisterfelder
-  stehen und verliert den Fokus. Die Felder bleiben jetzt stehen, Windows Terminal verteilt sie
-  anteilig: im kleineren Fenster werden Kopf und Raender schmaler, wieder maximiert stimmt der
-  Rahmen genau. Sieben Groessenwechsel hintereinander ohne Absturz.
-- `head.py --frame` beendet sich nach dem Aufbau; das Ende der Sitzung erkennen die Hilfsfelder
-  selbst. `<id>.reframe` entfaellt.
-
-## [0.12.1-beta.15] — 2026-11-04 — Windows
-
-### Behoben
-- Der Rahmen blieb aus, weil `head.py --frame` nie lief: `C64-Python` lieferte `py.exe|-3`,
-  `Start-Process` setzte jedes Argument in Anfuehrungszeichen, und der Launcher erkennt `"-3"`
-  dann nicht als Schalter. Python brach mit `Unknown option: -3` ab, noch vor dem ersten
-  Protokolleintrag. `C64-Python` liefert jetzt den echten Interpreter (`sys.executable`), und
-  Anfuehrungszeichen gibt es nur noch bei Leerzeichen.
-- `C64-Python`: `Select-Object -First 1` im Fluss brach den Prozess ab und verfaelschte
-  `$LASTEXITCODE`; der Platzhalter `python3.exe` aus dem Store warf dann einen Fehler.
-- Aus cmd blieb das LOAD-Feld offen mit „Prozess mit Code 64 beendet“: Windows Terminal schliesst
-  ein Feld nur bei Rueckgabe 0. `LOAD.cmd` endet jetzt mit `exit 0`.
-
 ## [0.12.1] — 2026-11-03
 
 ### Fixed
