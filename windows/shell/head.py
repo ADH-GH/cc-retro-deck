@@ -3,29 +3,22 @@
 
 Auf macOS und Linux legt tmux Felder um Claude Code (frame.sh, boot.py --band und --banner).
 Windows hat kein tmux; dort teilt Windows Terminal den Tab in Felder, kann sie aber nicht
-nachtraeglich auf eine Groesse setzen und verteilt sie bei Groessenaenderung anteilig. Darum
-laeuft Claude Code in einem Feld, das bleibt, und alles darum sind Hilfsfelder, die einmal in der
-richtigen Groesse entstehen und dann bis zum Ende stehen bleiben:
+nachtraeglich auf eine Groesse setzen und verteilt sie bei Groessenaenderung anteilig. Die Felder
+legt C64-Frame in load.ps1 einmal an, ohne swap-pane; sie bleiben bis zum Ende stehen:
 
-    head.py --frame <id>         im Hintergrund an der Konsole von Claude Code (C64-Run): legt die
-                                 Felder an, sobald die Groesse steht
-    head.py --head <id>          oben: drei Zeilen Kopfleiste (Logo, Himmel, zwei Krabben Hand in
-                                 Hand), Trennzeile, vier Zeilen Banner, Trennzeile
+    head.py --head <id>          im Feld von LOAD selbst, oben: drei Zeilen Kopfleiste (Logo, Himmel,
+                                 zwei Krabben Hand in Hand), Trennzeile, vier Zeilen Banner, Trennzeile
     head.py --fill <id> <rolle>  links, rechts (drei Spalten), unten (zwei Zeilen): Rahmenfarbe
 
 Windows Terminal startet neue Felder ohne die Umgebung von LOAD, darum die Kennung als Argument.
-Gemessen auf dem PC (scripts/frame-probe.ps1): ein neues Feld kommt immer rechts oder unten an,
-schmal nur, wenn es einzeln mit Pause angelegt wird und das geteilte Feld keinen Innenabstand hat
-(Profil "C64 Retro Deck Feld"), unten mindestens zwei Zeilen; swap-pane tauscht die Inhalte zweier
-Felder, die Groessen bleiben am Platz, der Fokus wandert mit dem Inhalt. Kopf und linker Rand
-entstehen darum gross rechts oder unten und werden an ihren Platz getauscht.
-
-Kein Neuaufbau bei Groessenaenderung (seit beta.16): Schliesst ein Feld, dessen Inhalt per swap-pane
-getauscht wurde, stuerzt Windows Terminal 1.24 bei der naechsten Groessenaenderung ab (TerminalApp.dll,
-0xc0000005) und nimmt alle Fenster mit; Zuruecktauschen vor dem Schliessen hilft nicht verlaesslich.
-Die Felder bleiben darum stehen. Windows Terminal verteilt sie anteilig: im kleineren Fenster werden
-Kopf und Raender schmaler (die Kopfleiste zeigt dann nur so viele Zeilen, wie Platz ist), und in der
-Groesse vom Aufbau, etwa wieder maximiert, stimmt der Rahmen wieder genau.
+Gemessen auf dem PC: ein neues Feld kommt immer rechts oder unten an, schmal nur, wenn es einzeln
+mit Pause angelegt wird und das geteilte Feld keinen Innenabstand hat (Profil "C64 Retro Deck
+Feld"), unten mindestens zwei Zeilen. Schliesst ein Feld, dessen Inhalt per swap-pane getauscht
+wurde, stuerzt Windows Terminal 1.24 bei der naechsten Groessenaenderung ab (TerminalApp.dll,
+0xc0000005) und nimmt alle Fenster mit. Darum wird nichts getauscht: das Feld von LOAD wird die
+Kopfleiste, der linke Rand entsteht darunter, Claude Code rechts davon, die uebrigen Raender rechts
+und unter Claude Code. Bei Groessenaenderung werden Kopf und Raender anteilig schmaler oder breiter
+(die Kopfleiste zeigt so viele Zeilen, wie Platz ist); in der Groesse vom Start stimmt es genau.
 
 Das Ende erkennt jedes Teil an ~/.claude/retro-deck/<id>.pid: C64-Run legt die Datei beim Start
 von Claude Code an und loescht sie danach; der Mod erneuert daneben <id>.alive alle 15 s. Fehlt
@@ -37,7 +30,6 @@ Hilfsfeld meldet sich mit <id>.<rolle>.up an und ab.
 import os
 import shutil
 import signal
-import subprocess
 import sys
 import time
 
@@ -51,7 +43,7 @@ from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_
 BAND_ROWS = 3
 BANNER_TOP = BAND_ROWS + 2            # eine Trennzeile zwischen Kopfleiste und Banner
 STALE_S = 90
-VERSION = '0.12.1-beta.17'                         # mit plugin.json hochzaehlen
+VERSION = '0.12.1-beta.18'                         # mit plugin.json hochzaehlen
 # Colodore: Rahmenfarbe Hellblau auf ANSI 12, wie load.ps1 sie setzt. Ein Randfeld startet Windows
 # Terminal mit seinem eigenen Farbschema; das Feld setzt sich die Farbe darum selbst.
 LIGHT_BLUE = '70/6d/eb'
@@ -81,11 +73,6 @@ def paint_crab(rows, top, left, bg=boot.SCREEN_BG):
 boot.paint_crab = paint_crab                  # auch fuer paint_pair, die Krabben Hand in Hand
 
 
-FELD = '{6b3c64c6-4c0d-4f8e-9a64-0c64de5c0de2}'     # Profil "C64 Retro Deck Feld" im Fragment
-HEAD_ROWS = 9
-SIDE_COLS = 3.4                       # Anteile runden ab: so werden es drei Spalten, zwei Zeilen
-BOTTOM_ROWS = 2.4
-
 
 def arg(flag, n=1):
     if flag in sys.argv:
@@ -96,7 +83,7 @@ def arg(flag, n=1):
 
 
 def frame_id():
-    for flag in ('--frame', '--head', '--fill'):
+    for flag in ('--head', '--fill'):
         if arg(flag):
             return arg(flag)
     return os.environ.get('C64_FRAME', '')
@@ -111,7 +98,7 @@ def frame_files():
 
 
 class Helper:
-    """Meldet ein Hilfsfeld an und ab: der Framer wartet auf die Anmeldung, bevor er weiterteilt."""
+    """Meldet ein Hilfsfeld an und ab: C64-Frame wartet auf die Anmeldung, bevor es weiterteilt."""
 
     def __init__(self, role):
         self.up = base_path(f'.{role}.up')
@@ -279,44 +266,8 @@ def log(msg):
         pass
 
 
-def wt(*args):
-    try:
-        r = subprocess.run(['wt.exe', '-w', '0', *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=15)
-        log(f'wt {" ".join(a for a in args[:6])} -> {r.returncode}')
-    except (OSError, subprocess.SubprocessError) as e:
-        log(f'wt {args[0]} failed: {e}')
-
-
-def conout_size():
-    """Fensterflaeche der Konsole ueber CONOUT$: gilt auch, wenn Start-Process die Standardkanaele
-    nicht als Konsole weitergab (os.get_terminal_size kennt unter Windows nur fd 0 bis 2)."""
-    if os.name != 'nt':
-        return (0, 0)
-    try:
-        import ctypes
-        from ctypes import wintypes
-        k = ctypes.WinDLL('kernel32', use_last_error=True)
-        k.CreateFileW.restype = wintypes.HANDLE
-        h = k.CreateFileW('CONOUT$', 0xC0000000, 3, None, 3, 0, None)
-        if not h or h == wintypes.HANDLE(-1).value:
-            return (0, 0)
-
-        class Info(ctypes.Structure):
-            _fields_ = [('size', wintypes._COORD), ('cursor', wintypes._COORD), ('attr', wintypes.WORD),
-                        ('win', wintypes.SMALL_RECT), ('max', wintypes._COORD)]
-        info = Info()
-        ok = k.GetConsoleScreenBufferInfo(h, ctypes.byref(info))
-        k.CloseHandle(h)
-        if not ok:
-            return (0, 0)
-        return (info.win.Right - info.win.Left + 1, info.win.Bottom - info.win.Top + 1)
-    except Exception:
-        return (0, 0)
-
-
 def console_size():
-    """Groesse des Feldes von Claude Code: --frame laeuft an dessen Konsole."""
+    """Groesse dieses Feldes (os.get_terminal_size kennt unter Windows nur fd 0 bis 2)."""
     for fd in (1, 2, 0):
         try:
             size = tuple(os.get_terminal_size(fd))
@@ -324,85 +275,11 @@ def console_size():
                 return size
         except (OSError, ValueError):
             continue
-    return conout_size()
-
-
-def share(x):
-    return f'{min(0.995, max(0.005, x)):.3f}'
-
-
-def wait_up(role, timeout=2.5):
-    """True, sobald das Hilfsfeld sich angemeldet hat (sonst lehnte Windows Terminal die Teilung ab)."""
-    end = time.time() + timeout
-    while time.time() < end:
-        if os.path.exists(base_path(f'.{role}.up')):
-            return True
-        time.sleep(0.1)
-    log(f'{role} did not come up')
-    return False
-
-
-def build():
-    """Legt die Hilfsfelder um das Feld von Claude Code an, das dabei den Fokus behaelt."""
-    cols, rows = console_size()
-    log(f'build {cols}x{rows}')
-    if cols < 20 or rows < HEAD_ROWS + 6:
-        log('too small or no console size: no frame')
-        return
-    me = [sys.executable, os.path.abspath(__file__)]
-    here = ['-p', FELD, '-d', os.getcwd()]
-    fid = frame_id()
-    # Kopf: gross unten neu, dann nach oben getauscht; der Fokus wandert mit, zurueck nach unten.
-    wt('split-pane', '-H', '-s', share((rows - HEAD_ROWS) / rows), *here, *me, '--head', fid)
-    if wait_up('head'):
-        time.sleep(0.4)
-        wt('swap-pane', 'up')
-        time.sleep(0.4)
-        wt('move-focus', 'down')
-        time.sleep(0.6)
-    rows_below = rows - HEAD_ROWS
-    # Linker Rand: ebenso gross rechts neu, nach links getauscht.
-    wt('split-pane', '-V', '-s', share((cols - 3) / cols), *here, *me, '--fill', fid, 'left')
-    if wait_up('left'):
-        time.sleep(0.4)
-        wt('swap-pane', 'left')
-        time.sleep(0.4)
-        wt('move-focus', 'right')
-        time.sleep(0.6)
-    # Rechter Rand und unterer Rand: schmal neu, einzeln, mit Pause.
-    wt('split-pane', '-V', '-s', share(SIDE_COLS / (cols - 3)), *here, *me, '--fill', fid, 'right')
-    if wait_up('right'):
-        time.sleep(0.4)
-        wt('move-focus', 'left')
-        time.sleep(0.6)
-    wt('split-pane', '-H', '-s', share(BOTTOM_ROWS / rows_below), *here, *me, '--fill', fid, 'bottom')
-    if wait_up('bottom'):
-        time.sleep(0.4)
-        wt('move-focus', 'up')
-
-
-def frame():
-    """Baut den Rahmen einmal, sobald das Feld von LOAD weg ist; danach bleiben die Felder stehen
-    (kein Neuaufbau bei Groessenaenderung, siehe oben) und enden selbst mit der Sitzung."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)     # Strg+C gilt Claude Code, nicht diesem Helfer
-    started = time.time()
-    log(f'frame {VERSION} python {sys.version.split()[0]} wt {shutil.which("wt.exe") or "-"} '
-        f'cwd {os.getcwd()} fds {[os.isatty(fd) for fd in (0, 1, 2)]} size {console_size()}')
-    # LOAD schliesst sein Feld 1,2 s nach dem Teilen; danach waechst dieses auf den ganzen Tab.
-    time.sleep(1.2)
-    size, stable = console_size(), time.time()
-    while time.time() - stable < 0.8 and time.time() - started < 6:
-        time.sleep(0.2)
-        if console_size() != size:
-            size, stable = console_size(), time.time()
-    build()
-    log('frame built, framer done')
+    return (0, 0)
 
 
 if __name__ == '__main__':
-    if '--frame' in sys.argv:
-        frame()
-    elif '--fill' in sys.argv:
+    if '--fill' in sys.argv:
         fill()
     else:
         main()

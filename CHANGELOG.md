@@ -3,6 +3,24 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.1-beta.18] — 2026-11-05 — Windows
+
+### Behoben
+- **Absturz nach dem Ende:** Endete Claude Code, schlossen sich auch die getauschten Felder (Kopfleiste,
+  linker Rand), und die naechste Groessenaenderung riss Windows Terminal mit allen Fenstern ab. Der
+  Rahmen entsteht jetzt ganz ohne `swap-pane` (`C64-Frame` in `load.ps1`): Das Feld von LOAD teilt
+  unten den linken Rand ab, der rechts das Feld von Claude Code, und dieses rechts und unten die
+  uebrigen Raender. Das LOAD-Feld zeigt danach selbst die Kopfleiste (`head.py --head` im
+  Vordergrund) und schliesst sich mit der Sitzung. Gemessen: Groessenaenderung vor und nach dem Ende
+  ohne Absturz.
+- **Kein Rahmen aus cmd im Startmenue:** Gibt Windows eine aussen gestartete Konsole an Windows
+  Terminal weiter (Standardterminal), fehlt `WT_SESSION`, und LOAD lief ohne Rahmen. `C64-InWT`
+  erkennt Windows Terminal jetzt auch am Besitzer des Konsolenfensters.
+- Kein Rahmen? `~/.claude/retro-deck/load.log` sagt warum.
+
+### Geaendert
+- `head.py --frame` entfaellt; `head.py` zeichnet nur noch Kopfleiste und Raender.
+
 ## [0.12.1-beta.17] — 2026-11-05 — Windows
 
 ### Behoben
