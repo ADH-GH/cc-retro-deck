@@ -28,14 +28,18 @@ SOCK="${C64_FRAME_SOCK:-c64-$$}"      # Umgebungsvariable nur fuer Tests
 cols=${COLUMNS:-$(tput cols)}
 rows=${LINES:-$(tput lines)}
 T=(tmux -L "$SOCK" -f "$DIR/c64.tmux.conf")
+# Liegt, solange dieser Tab vorne ist (Hooks client-focus-in/-out unten); fehlt sie, ruht die
+# Kopfleiste (boot.py --band). Schickt Terminal keine Fokusmeldung, bleibt sie ab dem Anhaengen
+# liegen, und die Leiste laeuft wie vorher immer.
+FOCUS="$HOME/.claude/retro-deck/focus-$SOCK"
 
 # Die Mitte: Claude Code mit dem TERM_PROGRAM des Tabs; danach faellt der ganze Server.
-typeset cmd="C64_FRAME=$SOCK TERM_PROGRAM=${(q)${TERM_PROGRAM:-}} ${(j: :)${(q)@}}; rm -f ~/.claude/retro-deck/party-$SOCK; tmux kill-server"
+typeset cmd="C64_FRAME=$SOCK TERM_PROGRAM=${(q)${TERM_PROGRAM:-}} ${(j: :)${(q)@}}; rm -f ~/.claude/retro-deck/party-$SOCK ${(q)FOCUS}; tmux kill-server"
 TMUX= "${T[@]}" new-session -d -s c64 -n claude -x "$cols" -y "$rows" "$cmd"
 MAIN=$("${T[@]}" display -p -t c64:0 '#{pane_id}')
 
 hold="sleep 2147483647"
-band="C64_FRAME=$SOCK TERM_PROGRAM=${(q)${TERM_PROGRAM:-}} python3 ${(q)DIR}/boot.py --band || $hold"
+band="C64_FRAME=$SOCK C64_FOCUS=${(q)FOCUS} TERM_PROGRAM=${(q)${TERM_PROGRAM:-}} python3 ${(q)DIR}/boot.py --band || $hold"
 banner="TERM_PROGRAM=${(q)${TERM_PROGRAM:-}} python3 ${(q)DIR}/boot.py --banner || $hold"
 TOP=$("${T[@]}"   split-window -d -P -F '#{pane_id}' -t "$MAIN" -v -b -l 3 "$band")
 BAN=$("${T[@]}"   split-window -d -P -F '#{pane_id}' -t "$MAIN" -v -b -l 4 "$banner")
@@ -56,7 +60,11 @@ fix="resize-pane -t $TOP -y 3 ; resize-pane -t $BAN -y 4 ; resize-pane -t $BOT -
 # Tab zu = Sitzung zu, wie ohne Rahmen (dort beendet das SIGHUP claude). Sonst liefe claude
 # im verwaisten Server unsichtbar weiter, haelt Last und steht im Deck. Erst beim Anhaengen
 # setzen: vorher gesetzt beendet tmux 3.8 die noch nie angehaengte Sitzung sofort.
-"${T[@]}" set-hook -g client-attached "$fix ; set -g destroy-unattached on"
+"${T[@]}" set-hook -g client-attached "$fix ; set -g destroy-unattached on ; run-shell -b 'touch ${(q)FOCUS}'"
+# Nur der Tab vorne animiert (focus-events on in c64.tmux.conf).
+"${T[@]}" set-hook -g client-focus-in  "run-shell -b 'touch ${(q)FOCUS}'"
+"${T[@]}" set-hook -g client-focus-out "run-shell -b 'rm -f ${(q)FOCUS}'"
+"${T[@]}" set-hook -g client-detached  "run-shell -b 'rm -f ${(q)FOCUS}'"
 
 # Maus nur fuer die Mitte: Klicks und Rad erreichen Claude Code, der Rahmen bleibt stumm.
 is_main="#{==:#{pane_id},$MAIN}"

@@ -3,6 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.2] — 2026-11-07
+
+### Changed
+- `cc-retro-deck-mac`: inside the `LOAD` frame the crab header animates only in the Terminal tab
+  in front. Tabs in the background show a still picture and check once a second, so many open
+  frames no longer keep Terminal redrawing (one test machine: 28 frames, Terminal at 48 % CPU).
+  `cc-retro-deck-linux` and `cc-retro-deck-windows` carry the same number without changes.
+
 ## [0.12.1] — 2026-11-05
 
 ### Added

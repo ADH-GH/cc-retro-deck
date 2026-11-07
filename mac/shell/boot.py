@@ -264,6 +264,13 @@ def party_file():
     return os.path.join(os.path.expanduser('~'), '.claude', 'retro-deck', f'party-{sock}')
 
 
+def focus_file():
+    """Die Fokus-Datei des Rahmens: frame.sh legt sie per tmux-Hook an, solange der Tab vorne ist,
+    und loescht sie, wenn er nach hinten geht. Ohne C64_FOCUS (Linux, Windows, Tests) gibt es
+    keine, dann laeuft die Kopfleiste immer."""
+    return os.environ.get('C64_FOCUS') or None
+
+
 def party_stamp(path):
     try:
         return os.stat(path).st_mtime if path else 0
@@ -278,6 +285,9 @@ def band():
     zurueckkommen. Die Sterne funkeln auch im Stand; dafuer zeichnet die Leiste dann viermal
     je Sekunde. Beruehrt `/deck intro` die Party-Datei, laufen die Krabben sofort los, und
     die Namen am Himmel blinken bunt, bis sie drueben sind.
+    Nur im Tab vorne: fehlt die Fokus-Datei (focus_file), steht ein ruhendes Bild, und die Leiste
+    schaut nur noch einmal je Sekunde nach. Mit 28 offenen Rahmen zeichnete Terminal sonst alle
+    Kopfleisten im Hintergrund mit (2026-11-07: Terminal 48 % CPU).
     """
     apple = os.environ.get('TERM_PROGRAM') == 'Apple_Terminal'
     write = sys.stdout.write
@@ -288,6 +298,7 @@ def band():
     dance_left = text_col + max(len(t) for t in LOGO_TEXT) + 3
     pfile = party_file()
     seen = party_stamp(pfile)
+    ffile = focus_file()
 
     def size():
         return shutil.get_terminal_size((80, 3))
@@ -305,6 +316,7 @@ def band():
     standing = 0                      # Takte, die die Krabben noch stehen
     party = False
     sky_span, stars, labels = -1, [], []
+    resting = None                    # Groesse, in der das ruhende Bild steht; None: Leiste laeuft
     write(HIDE)
     try:
         while True:
@@ -315,6 +327,25 @@ def band():
                     standing = 0
                     direction = -direction
             cols, rows = size()
+            if ffile and not os.path.exists(ffile):
+                # Tab hinten: einmal ruhend zeichnen (Krabben stehen, Himmel still), dann warten.
+                if resting != (cols, rows):
+                    dance_right = max(dance_left, cols - BORDER_COLS - PAIR_W + 1)
+                    span = dance_right - dance_left + PAIR_W
+                    if span != sky_span:
+                        stars, labels = make_sky(span)
+                        sky_span = span
+                    x = max(dance_left, min(x, dance_right))
+                    out = ''.join(at(r, 1) + BORDER_BG + ' ' * cols + RESET for r in (1, 2, 3)) + logo()
+                    out += paint_sky(frame, 1, dance_left, span, stars, labels, bg=BORDER_BG, star=WHITE, dim=WHITE)
+                    out += paint_pair(apple, direction, 0, 1, x, BORDER_BG, standing=True)
+                    write(out)
+                    sys.stdout.flush()
+                    resting = (cols, rows)
+                party = False
+                time.sleep(1)
+                continue
+            resting = None
             dance_right = max(dance_left, cols - BORDER_COLS - PAIR_W + 1)
             span = dance_right - dance_left + PAIR_W
             if span != sky_span:
