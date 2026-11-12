@@ -12,6 +12,7 @@
 #   LOAD "*",8,1 FLACH      ohne tmux-Rahmen, claude direkt im Tab
 #   LOAD "ERIC",8,1         wie "*", aber mit New York statt der Enterprise (nyc.py): die
 #                           Fassung fuer Eric, n8n Ambassador NYC; LOAD "BERTRAND",8,1 ebenso
+#   LOAD "ARNO",8,1         Telekom in Magenta (magenta.py), fuer Arno von der Telekom
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben und Prompt des Tabs wie vorher
 #
@@ -57,7 +58,7 @@ LOAD() {
   for a in "$@"; do
     up=$(printf %s "$a" | tr '[:lower:]' '[:upper:]')
     case "$up" in
-      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1) disk=${up%%,*}; continue ;;
+      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1|ARNO|ARNO,8|ARNO,8,1) disk=${up%%,*}; continue ;;
     esac
     case "$a" in
       '*,8,1'|'*,8'|'*') ;;                # der C64-Teil, verschluckt
@@ -76,7 +77,9 @@ LOAD() {
     if [ "$disk" = '*' ]; then
       python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
     else
-      python3 "$C64_RETRO_DIR/nyc.py" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
+      local intro=nyc.py
+      [ "$disk" = ARNO ] && intro=magenta.py
+      python3 "$C64_RETRO_DIR/$intro" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
     fi
   fi
   # Die Shell danach im C64-Ton: READY. als Prompt (ANSI 12 = Hellblau), Eingabe darunter.

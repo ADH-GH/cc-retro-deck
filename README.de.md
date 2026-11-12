@@ -83,6 +83,9 @@ Einen neuen Tab öffnen und `LOAD "*",8,1` tippen.
 Zwei Gastdisketten: `LOAD "ERIC",8,1` und `LOAD "BERTRAND",8,1` laden New York statt der
 Enterprise: Manhattan bei Nacht, darüber ein Workflow im n8n-Stil, der durchläuft, und eine
 Begrüßung mit Namen. Gemacht für Eric, n8n Ambassador NYC, und Bertrand.
+`LOAD "ARNO",8,1` ist die Magenta-Diskette für Arno von der Deutschen Telekom: ein Funkturm
+über der Stadt, ein KI-Netz, das Schicht für Schicht aufleuchtet, ein Satellit als Sprite,
+Ladebalken in Magenta und ein Demo-Scroller wie in einem C64-Cracktro.
 
 Sitzungen aus `LOAD` zeichnen auch Claude Code selbst in C64-Farben (Theme `dark-ansi`, nur
 für diese Sitzung). Ein schlichtes `claude` behält das eigene Theme.

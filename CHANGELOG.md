@@ -3,6 +3,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.6] — 2026-11-13
+
+### Added
+- All editions: guest disk `LOAD "ARNO",8,1` for Arno at Deutsche Telekom, in magenta. A city
+  at night with a lattice radio tower, magenta loader stripes in the border, a satellite sprite
+  crossing the sky and a demo scroller in a 5×7 pixel font ("HELLO ARNO * FROM 8 BIT TO AI *
+  VISIONARY OF THE MAGENTA NET"). At READY. a four-layer AI network appears and the border
+  turns magenta; at RUN the network lights up layer by layer and feeds the tower, which beams
+  to the satellite and sends radio arcs, the windows turn magenta and the T with its squares
+  lights up in the sky. Ends with "WELCOME, ARNO!  ERLEBEN, WAS VERBINDET."
+
+Update: `claude plugin marketplace update cc-retro-deck`, then `claude plugin update
+cc-retro-deck-<mac|linux|windows>@cc-retro-deck` and restart Claude Code.
+
 ## [0.12.5] — 2026-11-12
 
 Includes 0.12.3 and 0.12.4, which were not released on their own.

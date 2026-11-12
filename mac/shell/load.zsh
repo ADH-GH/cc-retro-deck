@@ -13,6 +13,7 @@
 #   LOAD "*",8,1 FLACH      ohne tmux-Rahmen, claude direkt im Tab
 #   LOAD "ERIC",8,1         wie "*", aber mit New York statt der Enterprise (nyc.py): die
 #                           Fassung fuer Eric, n8n Ambassador NYC; LOAD "BERTRAND",8,1 ebenso
+#   LOAD "ARNO",8,1         Telekom in Magenta (magenta.py), fuer Arno von der Telekom
 #   RUN                     nur claude, ohne alles
 #
 # Der Rahmen braucht tmux (brew install tmux); fehlt es oder laeuft die Shell schon in tmux,
@@ -33,7 +34,7 @@ LOAD() {
   local -a args
   for a in "$@"; do
     case "${(U)a}" in
-      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1) disk=${(U)a%%,*}; continue ;;
+      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1|ARNO|ARNO,8|ARNO,8,1) disk=${(U)a%%,*}; continue ;;
     esac
     case "$a" in
       '*,8,1'|'*,8'|'*') ;;                # der C64-Teil, verschluckt
@@ -75,7 +76,9 @@ APPLESCRIPT
     if [[ $disk == '*' ]]; then
       python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
     else
-      python3 "$C64_RETRO_DIR/nyc.py" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
+      local intro=nyc.py
+      [[ $disk == ARNO ]] && intro=magenta.py
+      python3 "$C64_RETRO_DIR/$intro" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
     fi
   fi
   # Die Shell danach im C64-Ton: READY. als Prompt, Eingabe darunter.

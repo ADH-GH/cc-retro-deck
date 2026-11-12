@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import boot  # noqa: E402
 from boot import at, RESET, BOLD, LB, SCREEN_BG, HIDE, SHOW, ALT_ON, ALT_OFF  # noqa: E402
 from trek import (SCR, vic_fix, quantize, mix, add, smooth, paint_cells, raster_border,  # noqa: E402
-                  plain_border, gradient_text, geometry, write_png,
+                  plain_border, gradient_text, geometry, write_png, bg,
                   F_LOADING, F_SWEEP0, F_SWEEP1, F_READY, F_RUN, F_END)
 
 N8N = (234, 75, 113)          # n8n-Farbe: Workflow, Spitze des Empire State, Schriftzug
@@ -249,14 +249,33 @@ def wrap(line, width):
     return [line[i:i + width] for i in range(0, len(line), width)] or ['']
 
 
-def main(name):
+def color_border(cols, rows, c):
+    """Der Rahmen in einer festen Farbe statt der des Profils."""
+    out = []
+    for r in range(1, rows + 1):
+        if r <= boot.BORDER_ROWS or r > rows - boot.BORDER_ROWS:
+            out.append(at(r, 1) + bg(c) + ' ' * cols)
+        else:
+            out.append(at(r, 1) + bg(c) + ' ' * boot.BORDER_COLS + at(r, cols - boot.BORDER_COLS + 1) + ' ' * boot.BORDER_COLS)
+    return ''.join(out) + RESET
+
+
+def main(name, panel_cls=None, motto='n8n AMBASSADOR NYC', accent=N8N, accent2=(255, 176, 96),
+         finale=None, finale_border=None, finale_at=F_WAVE0, border_at=None, raster=None):
+    """Der Ablauf links (LOAD, SEARCHING, ...) und der Kopf; das Bild rechts liefert panel_cls.
+    magenta.py nimmt denselben Ablauf mit eigenem Bild. finale: Zeile, die ab finale_at die
+    Begruessung ersetzt; finale_border: Rahmenfarbe ab border_at (Vorgabe finale_at);
+    raster(cols, rows, f): eigene Ladebalken statt der bunten."""
+    raster = raster or raster_border
+    border_at = finale_at if border_at is None else border_at
+    panel_cls = panel_cls or Panel
     cols, rows = shutil.get_terminal_size((100, 30))
     apple = os.environ.get('TERM_PROGRAM') == 'Apple_Terminal'
     sl, sr, st, banner_top, text_w, pl, pr, pt, pb, cl, cr, ct, cb = geometry(cols, rows)
     W, H = cr - cl + 1, 2 * (cb - ct + 1)
     if W < 40 or H < 14:
         return 2
-    panel = Panel(W, H)
+    panel = panel_cls(W, H)
     lines, typed = [], ''
     cmd = f'LOAD "{name}",8,1'
 
@@ -295,7 +314,7 @@ def main(name):
             done = script(f)
             out = []
             if F_LOADING <= f < F_READY:
-                out.append(raster_border(cols, rows, f))
+                out.append(raster(cols, rows, f))
             elif f == F_READY:
                 out.append(plain_border(cols, rows))
             for i, line in enumerate(lines):
@@ -304,12 +323,18 @@ def main(name):
             out.append(at(pt + len(lines), sl) + LB + SCREEN_BG + (typed + cursor).ljust(text_w - 1) + RESET)
             out.append(paint_cells(panel.frame(f), ct, cl))
             if f == 0:
-                text = 'n8n AMBASSADOR NYC'
-                out.append(gradient_text(banner_top + 2, sl + text.center(width).index(text), text, N8N, (255, 176, 96), 1.0))
+                text = motto
+                out.append(gradient_text(banner_top + 2, sl + text.center(width).index(text), text, accent, accent2, 1.0))
             if F_READY <= f < F_READY + 6:
                 text = f'WELCOME, {name}!'
                 out.append(gradient_text(banner_top + 3, sl + text.center(width).index(text), text, (255, 255, 255), (255, 214, 120),
                                          smooth((f - F_READY) / 5)))
+            if finale_border and f == border_at:
+                out.append(color_border(cols, rows, finale_border))
+            if finale and finale_at <= f < finale_at + 6:
+                out.append(at(banner_top + 3, sl) + SCREEN_BG + ' ' * width + RESET)
+                out.append(gradient_text(banner_top + 3, sl + finale.center(width).index(finale), finale, accent2, accent,
+                                         smooth((f - finale_at) / 5)))
             write(''.join(out))
             sys.stdout.flush()
             if done:

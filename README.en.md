@@ -82,6 +82,9 @@ Open a new terminal tab and type `LOAD "*",8,1`.
 Two guest disks: `LOAD "ERIC",8,1` and `LOAD "BERTRAND",8,1` load New York instead of the
 Enterprise: Manhattan at night, an n8n-style workflow running above the skyline and a welcome
 by name. Made for Eric, n8n Ambassador NYC, and Bertrand.
+`LOAD "ARNO",8,1` is the magenta disk for Arno at Deutsche Telekom: a radio tower over the
+city, an AI network lighting up layer by layer, a satellite sprite, magenta loader stripes and
+a demo scroller like a C64 cracktro.
 
 Sessions started by `LOAD` draw Claude Code itself in C64 colors too (theme `dark-ansi`, for
 that session only). A plain `claude` keeps your own theme.

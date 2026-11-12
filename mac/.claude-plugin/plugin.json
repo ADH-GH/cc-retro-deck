@@ -1,6 +1,6 @@
 {
   "name": "cc-retro-deck-mac",
-  "version": "0.12.5",
+  "version": "0.12.6",
   "description": "C64/Amiga-styled figures in the prompt footer, a deck of every running Claude session (tab id, state, topic) with jumps between Terminal tabs, a dancing crab, and an opt-in auto-switch to the tab that needs you.",
   "types": "./types/index.d.ts",
   "userConfig": {
