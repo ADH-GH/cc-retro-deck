@@ -3,6 +3,32 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins share one
 version number.
 
+## [0.12.5] — 2026-11-12
+
+Includes 0.12.3 and 0.12.4, which were not released on their own.
+
+### Added
+- All editions: two guest disks. `LOAD "ERIC",8,1` and `LOAD "BERTRAND",8,1` show New York
+  instead of the Enterprise: Manhattan at night in VIC-II colors (Empire State, Chrysler,
+  One World Trade, the Statue of Liberty, reflections in the water), loading into 24-bit
+  color. At READY. a four-node workflow appears above the skyline and greets you by name; at
+  RUN it runs node by node, then the top of the Empire State lights up in n8n pink and the
+  windows come on from left to right. Made for Eric, n8n Ambassador NYC, and Bertrand. Text and
+  color only, no n8n logo.
+- `cc-retro-deck-mac`: `/deck update`. Plain `/deck update` lists the Terminal tabs whose
+  Claude Code is older than the installed one and changes nothing; `/deck update go` runs
+  `claude update`, then restarts each of those tabs in the same tab with `--resume` (inside
+  the `LOAD` frame again with the frame), waits for busy sessions, and restarts its own tab
+  last, which then shows the result. `/deck update resume` continues an interrupted run. Text
+  typed but not sent in a tab is lost. Log: `~/.claude/retro-deck/update.log`.
+
+### Fixed
+- An empty session list no longer overwrites the snapshot `/deck restore` falls back on.
+
+Update: `claude plugin marketplace update cc-retro-deck`, then `claude plugin update
+cc-retro-deck-<mac|linux|windows>@cc-retro-deck` and restart Claude Code; a set-up shell picks
+up the new files on that start, `LOAD` uses them in the next new tab.
+
 ## [0.12.2] — 2026-11-07
 
 ### Changed

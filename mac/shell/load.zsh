@@ -11,6 +11,8 @@
 #   LOAD "*",8,1 RAHMEN     nimmt das Profil "C64 Rahmen" (hellblauer Grund) statt "C64"
 #   LOAD "*",8,1 FAST       ohne Einschaltbildschirm, nur die drei Zeilen
 #   LOAD "*",8,1 FLACH      ohne tmux-Rahmen, claude direkt im Tab
+#   LOAD "ERIC",8,1         wie "*", aber mit New York statt der Enterprise (nyc.py): die
+#                           Fassung fuer Eric, n8n Ambassador NYC; LOAD "BERTRAND",8,1 ebenso
 #   RUN                     nur claude, ohne alles
 #
 # Der Rahmen braucht tmux (brew install tmux); fehlt es oder laeuft die Shell schon in tmux,
@@ -27,9 +29,12 @@ typeset -g C64_RETRO_DIR="${${(%):-%x}:A:h}"
 C64_THEME='{"theme":"dark-ansi"}'
 
 LOAD() {
-  local profile="C64" fast=0 flat=0 a
+  local profile="C64" fast=0 flat=0 disk='*' a
   local -a args
   for a in "$@"; do
+    case "${(U)a}" in
+      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1) disk=${(U)a%%,*}; continue ;;
+    esac
     case "$a" in
       '*,8,1'|'*,8'|'*') ;;                # der C64-Teil, verschluckt
       RAHMEN|rahmen) profile="C64 Rahmen" ;;
@@ -60,14 +65,18 @@ APPLESCRIPT
   fi
   if (( fast )) || [[ ! -t 1 ]] || ! command -v python3 >/dev/null; then
     print ""
-    print "SEARCHING FOR *"
+    print "SEARCHING FOR $disk"
     sleep 0.4
     print "LOADING"
     sleep 0.4
     print "READY."
     sleep 0.3
   else
-    python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
+    if [[ $disk == '*' ]]; then
+      python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
+    else
+      python3 "$C64_RETRO_DIR/nyc.py" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
+    fi
   fi
   # Die Shell danach im C64-Ton: READY. als Prompt, Eingabe darunter.
   PROMPT=$'\n%F{12}READY.%f\n'

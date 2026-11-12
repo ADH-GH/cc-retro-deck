@@ -79,6 +79,10 @@ What `apply` does:
 
 Open a new terminal tab and type `LOAD "*",8,1`.
 
+Two guest disks: `LOAD "ERIC",8,1` and `LOAD "BERTRAND",8,1` load New York instead of the
+Enterprise: Manhattan at night, an n8n-style workflow running above the skyline and a welcome
+by name. Made for Eric, n8n Ambassador NYC, and Bertrand.
+
 Sessions started by `LOAD` draw Claude Code itself in C64 colors too (theme `dark-ansi`, for
 that session only). A plain `claude` keeps your own theme.
 
@@ -90,6 +94,7 @@ that session only). A plain `claude` keeps your own theme.
 | `/deck intro` | send the crabs dancing |
 | `/deck zoom +` / `-` | font of this tab one point bigger / smaller (macOS; also the `(+)` `(-)` in the footer) |
 | `/deck restore` | reopen sessions a closed terminal took with it |
+| `/deck update` | macOS: show which tabs run an older Claude Code; `/deck update go` runs `claude update` and restarts every tab in place with its conversation, this one last |
 | `/deck theme c64\|amiga\|cga` | palette for this session |
 | `/pure HELP` | C64 BASIC commands read as deck actions |
 | `/emul` | a Commodore 64 in a pane |

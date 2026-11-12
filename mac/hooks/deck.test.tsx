@@ -217,3 +217,27 @@ test('/deck setup shows its plan first, apply adds the marked block, uninstall t
   expect(gone.text).toMatch(/claude plugin uninstall/)
   expect(files[`${HOME}/.zshrc`]).toBe('export A=1\nsource ~/old/load.zsh\n')
 })
+
+test('/deck update shows the list first and starts only on go; a finished run is told in this tab', QUIET, async ($, on) => {
+  const calls: string[][] = []
+  const files: Record<string, string> = {}
+  mock.clock(on)
+  engine(on, [], { CC_RETRO_DECK_NO_TERMINAL: '1' }, argv => {
+    if (argv[0] === 'python3' && String(argv[2]).endsWith('/scripts/update.py')) {
+      calls.push([...argv.slice(3)])
+      return argv[3] === 'plan' ? '2 tab(s) restart on 2.1.320 (now 2.1.312):\nType /deck update go to start.\n' : 'Update started.\n'
+    }
+    return ''
+  }, files)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const deck = (args: string) => $.command.run({ command: 'deck', args, origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } })
+
+  const plan = await deck('update')
+  expect(plan.text).toMatch(/2 tab\(s\) restart on 2\.1\.320/)
+  expect(calls.map(c => c[0])).toEqual(['plan'])
+
+  const go = await deck('update go')
+  expect(go.text).toMatch(/Update started/)
+  expect(calls.map(c => c[0])).toEqual(['plan', 'start'])
+  expect(calls[1]).toContain('--self')
+})

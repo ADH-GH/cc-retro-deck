@@ -11,6 +11,8 @@
 #   LOAD "*",8,1 RAHMEN     hellblauer Grund statt dunkelblauem Bildschirm
 #   LOAD "*",8,1 FAST       ohne Einschaltbildschirm, nur die drei Zeilen
 #   LOAD "*",8,1 FLACH      ohne Rahmen: claude direkt im Tab, die Kopfleiste zeichnet der Mod
+#   LOAD "ERIC",8,1         wie "*", aber mit New York statt der Enterprise (nyc.py): die
+#                           Fassung fuer Eric, n8n Ambassador NYC; LOAD "BERTRAND",8,1 ebenso
 #                           dann selbst ueber der Eingabe
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben, Titel und Prompt des Tabs wie vorher
@@ -234,11 +236,12 @@ function global:C64-Frame([string]$look, [string]$py, [string[]]$pass, [int]$col
 }
 
 function global:LOAD {
-  $look = 'screen'; $fast = $false; $flat = $false; $viaCmd = $false; $pass = @()
+  $look = 'screen'; $fast = $false; $flat = $false; $viaCmd = $false; $disk = '*'; $pass = @()
   foreach ($a in $args) {
     if ($a -is [array]) { $a = ($a -join ',') }          # LOAD "*",8,1 kommt als ein Array an
     switch -Regex ([string]$a) {
       '^\*(,8(,1)?)?$' { break }                         # der C64-Teil, verschluckt
+      '^(?i)(eric|bertrand)(,8(,1)?)?$' { $disk = $Matches[1].ToUpper(); break }   # aus cmd kommt der Name allein
       '^(?i)rahmen$' { $look = 'rahmen'; break }
       '^(?i)fast$' { $fast = $true; break }
       '^(?i)(flach|flat)$' { $flat = $true; break }
@@ -253,13 +256,14 @@ function global:LOAD {
 
   $py = if ($interactive) { C64-Python } else { '' }
   if ($fast -or -not $py) {
-    ''; 'SEARCHING FOR *'; Start-Sleep -Milliseconds 400
+    ''; "SEARCHING FOR $disk"; Start-Sleep -Milliseconds 400
     'LOADING'; Start-Sleep -Milliseconds 400
     'READY.'; Start-Sleep -Milliseconds 300
   } else {
     $env:PYTHONUTF8 = '1'
     $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
-    & $exe @pre (Join-Path $C64Dir 'trek.py')
+    if ($disk -ne '*') { & $exe @pre (Join-Path $C64Dir 'nyc.py') $disk }
+    else { & $exe @pre (Join-Path $C64Dir 'trek.py') }
     if ($LASTEXITCODE -ne 0) { & $exe @pre (Join-Path $C64Dir 'boot.py') }
   }
 

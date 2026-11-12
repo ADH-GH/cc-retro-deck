@@ -10,6 +10,8 @@
 #   LOAD "*",8,1 RAHMEN     hellblauer Grund statt dunkelblauem Bildschirm
 #   LOAD "*",8,1 FAST       ohne Einschaltbildschirm, nur die drei Zeilen
 #   LOAD "*",8,1 FLACH      ohne tmux-Rahmen, claude direkt im Tab
+#   LOAD "ERIC",8,1         wie "*", aber mit New York statt der Enterprise (nyc.py): die
+#                           Fassung fuer Eric, n8n Ambassador NYC; LOAD "BERTRAND",8,1 ebenso
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben und Prompt des Tabs wie vorher
 #
@@ -50,9 +52,13 @@ _c64_colors() {   # _c64_colors screen|rahmen
 C64_THEME='{"theme":"dark-ansi"}'
 
 LOAD() {
-  local look=screen fast=0 flat=0 a
+  local look=screen fast=0 flat=0 disk='*' a up
   local -a args=()
   for a in "$@"; do
+    up=$(printf %s "$a" | tr '[:lower:]' '[:upper:]')
+    case "$up" in
+      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1) disk=${up%%,*}; continue ;;
+    esac
     case "$a" in
       '*,8,1'|'*,8'|'*') ;;                # der C64-Teil, verschluckt
       RAHMEN|rahmen) look=rahmen ;;
@@ -63,11 +69,15 @@ LOAD() {
   done
   [ -t 1 ] && _c64_colors "$look"
   if (( fast )) || [ ! -t 1 ] || ! command -v python3 >/dev/null; then
-    printf '\nSEARCHING FOR *\n'; sleep 0.4
+    printf '\nSEARCHING FOR %s\n' "$disk"; sleep 0.4
     printf 'LOADING\n'; sleep 0.4
     printf 'READY.\n'; sleep 0.3
   else
-    python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
+    if [ "$disk" = '*' ]; then
+      python3 "$C64_RETRO_DIR/trek.py" || python3 "$C64_RETRO_DIR/boot.py"
+    else
+      python3 "$C64_RETRO_DIR/nyc.py" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
+    fi
   fi
   # Die Shell danach im C64-Ton: READY. als Prompt (ANSI 12 = Hellblau), Eingabe darunter.
   [ -n "${_C64_PS1+x}" ] || _C64_PS1="$PS1"

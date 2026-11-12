@@ -978,7 +978,8 @@ async function refreshRosterOnce($: EngineInterface): Promise<void> {
       .sort((a, b) => a.tty.localeCompare(b.tty))
       .map(r => ({ sessionId: r.sessionId, cwd: r.cwd, project: labelOf(r), tty: r.tty })),
   }
-  await $.fs.write(snapshotPath(), JSON.stringify(snapshot, null, 2)).catch(() => undefined)
+  // An empty roster says nothing about what ran: keep the last snapshot (2026-11-08 found as []).
+  if (snapshot.sessions.length > 0) await $.fs.write(snapshotPath(), JSON.stringify(snapshot, null, 2)).catch(() => undefined)
 }
 
 async function runIntro($: EngineInterface): Promise<void> {
@@ -1004,6 +1005,38 @@ async function runIntro($: EngineInterface): Promise<void> {
       return { ...cur, x, dir, frame }
     })
   })
+}
+
+// /deck update (ADR 0006): scripts/update.py takes stock of every Terminal tab running Claude
+// Code, runs `claude update` and restarts each tab in place with --resume, this one last. Plain
+// `/deck update` only shows the list; `go` starts it, `resume` continues an interrupted run.
+function updateStatePath(): string { return `${home}/.claude/retro-deck/update-state.json` }
+
+async function updateCommand($: EngineInterface, arg: string): Promise<string> {
+  const script = `${$.plugin.root}/scripts/update.py`
+  const sub = arg === 'go' ? ['start', '--self', sessionId] : arg === 'resume' ? ['resume'] : ['plan', '--self', sessionId]
+  const ran = await $.process
+    .run(['python3', '-I', script, ...sub], { timeoutMs: 25000 })
+    .catch(err => ({ exitCode: 1, stdout: '', stderr: String(err) }))
+  if (ran.exitCode !== 0 && ran.stdout.trim() === '') return `update failed: ${ran.stderr.trim() || 'no answer'}`
+  return ran.stdout.trim()
+}
+
+/** After a restart by /deck update: once the run is over, say in this tab how it went. */
+async function updateReport($: EngineInterface): Promise<void> {
+  const text = await $.fs.read(updateStatePath()).catch(() => '')
+  if (!text) return
+  let st: { self?: string; finishedAt?: number | null; shown?: boolean; summary?: string; rows?: { tty: string; cwd: string; result?: string | null }[] }
+  try { st = JSON.parse(text) } catch { return }
+  if (st.self !== sessionId || st.shown) return
+  if (!st.finishedAt) {
+    void $.clock.after(15000, () => void updateReport($))   // this tab restarts last: the run ends shortly after
+    return
+  }
+  if (Date.now() - st.finishedAt > 30 * 60 * 1000) return
+  const bad = (st.rows ?? []).filter(r => r.result !== 'ok').map(r => `${projectOf(r.cwd)} ${r.result ?? 'open'}`)
+  $.ui.toast(`Update: ${st.summary ?? 'done'}${bad.length ? ` · not restarted: ${bad.join('; ')}` : ''}`)
+  await $.fs.write(updateStatePath(), JSON.stringify({ ...st, shown: true }, null, 2)).catch(() => undefined)
 }
 
 async function deckCommand($: EngineInterface, args: string): Promise<{ text: string }> {
@@ -1041,6 +1074,7 @@ async function deckCommand($: EngineInterface, args: string): Promise<{ text: st
     void runIntro($)
     return { text: 'Crab released.' }
   }
+  if (verb === 'update') return { text: await updateCommand($, arg ?? '') }
   if (verb === 'restore') {
     const ran = await $.process
       .run(['bash', `${$.plugin.root}/scripts/restore.sh`, arg === 'tabs' ? '--tabs' : '--windows'], { timeoutMs: 120000 })
@@ -1072,7 +1106,7 @@ export const register: Register = (on, options) => {
     sessionId = await $.session.id()
     await $.command.register({
       name: 'deck',
-      description: 'Retro deck: open the deck; "theme c64|amiga|cga"; "jump <hotkey>"; "restore" reopens closed sessions; "intro" sends the crabs dancing; "zoom +|-" sizes this tab\'s font',
+      description: 'Retro deck: open the deck; "theme c64|amiga|cga"; "jump <hotkey>"; "restore" reopens closed sessions; "update" updates Claude Code and restarts every tab; "intro" sends the crabs dancing; "zoom +|-" sizes this tab\'s font',
     })
     // Since Claude Code 2.1.3xx /tasks is built in and the host refuses the name. A refusal
     // must not end session.start: everything below (frame, timers, /pure, /emul) hangs on it.
@@ -1090,6 +1124,7 @@ export const register: Register = (on, options) => {
     const savedData = await $.store.get('pure-data').catch(() => undefined)
     if (Array.isArray(savedData)) pureData = savedData.filter((x): x is string => typeof x === 'string')
     const started = await next(e)
+    void updateReport($)
     await refreshRoster($)
     await measure($)
     appleTerminal = (await $.env.get('TERM_PROGRAM')) === 'Apple_Terminal'
