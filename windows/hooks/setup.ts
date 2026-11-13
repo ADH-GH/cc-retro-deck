@@ -18,7 +18,7 @@ import { exe, ps, slashes, win } from './win'
 
 const EDITION = {
   loader: 'load.ps1',
-  files: ['load.ps1', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'head.py', 'c64-settings.json', 'LOAD.cmd', 'SYS.cmd'],
+  files: ['load.ps1', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'berlin.py', 'head.py', 'c64-settings.json', 'LOAD.cmd', 'SYS.cmd'],
   plugin: 'cc-retro-deck-windows@cc-retro-deck',
 }
 const BEGIN = '# >>> cc-retro-deck >>>'
