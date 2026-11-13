@@ -18,6 +18,7 @@
 #   LOAD "EDUARDO",8,1      San Francisco im Summer-Games-Stil (sf.py), fuer Eduardo Ordax
 #   LOAD "ROB",8,1          Koeln mit Dom, Bruecke und Feuerwerk (cologne.py), fuer Rob
 #   LOAD "YURI",8,1         Graph-Universum mit Ultipa-Zeichen (ultipa.py), fuer Yuri
+#   LOAD "HOIV",8,1         Wien mit HOIV-Zeichen (hoiv.py), Tribut ans HOIV
 #                           dann selbst ueber der Eingabe
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben, Titel und Prompt des Tabs wie vorher
@@ -246,7 +247,7 @@ function global:LOAD {
     if ($a -is [array]) { $a = ($a -join ',') }          # LOAD "*",8,1 kommt als ein Array an
     switch -Regex ([string]$a) {
       '^\*(,8(,1)?)?$' { break }                         # der C64-Teil, verschluckt
-      '^(?i)(eric|bertrand|arno|jan|eduardo|rob|yuri)(,8(,1)?)?$' { $disk = $Matches[1].ToUpper(); break }   # aus cmd kommt der Name allein
+      '^(?i)(eric|bertrand|arno|jan|eduardo|rob|yuri|hoiv)(,8(,1)?)?$' { $disk = $Matches[1].ToUpper(); break }   # aus cmd kommt der Name allein
       '^(?i)rahmen$' { $look = 'rahmen'; break }
       '^(?i)fast$' { $fast = $true; break }
       '^(?i)(flach|flat)$' { $flat = $true; break }
@@ -267,7 +268,7 @@ function global:LOAD {
   } else {
     $env:PYTHONUTF8 = '1'
     $exe, $pre = $py -split '\|'; $pre = @($pre | Where-Object { $_ })
-    if ($disk -ne '*') { & $exe @pre (Join-Path $C64Dir $(switch ($disk) { 'ARNO' { 'magenta.py' } 'JAN' { 'berlin.py' } 'EDUARDO' { 'sf.py' } 'ROB' { 'cologne.py' } 'YURI' { 'ultipa.py' } default { 'nyc.py' } })) $disk }
+    if ($disk -ne '*') { & $exe @pre (Join-Path $C64Dir $(switch ($disk) { 'ARNO' { 'magenta.py' } 'JAN' { 'berlin.py' } 'EDUARDO' { 'sf.py' } 'ROB' { 'cologne.py' } 'YURI' { 'ultipa.py' } 'HOIV' { 'hoiv.py' } default { 'nyc.py' } })) $disk }
     else { & $exe @pre (Join-Path $C64Dir 'trek.py') }
     if ($LASTEXITCODE -ne 0) { & $exe @pre (Join-Path $C64Dir 'boot.py') }
   }

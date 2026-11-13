@@ -1,6 +1,6 @@
 {
   "name": "cc-retro-deck-windows",
-  "version": "0.12.10",
+  "version": "0.12.11",
   "description": "Windows (Windows Terminal, PowerShell): C64 footer and header band, a deck of every running Claude session with jumps between Windows Terminal tabs, LOAD \"*\",8,1 with boot screen, a dancing crab.",
   "types": "./types/index.d.ts",
   "userConfig": {

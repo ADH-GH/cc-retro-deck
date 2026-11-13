@@ -12,7 +12,7 @@ const EDITION = {
   rc: '.zshrc',
   loader: 'load.zsh',
   line: '[[ -r ~/.claude/retro-deck/shell/load.zsh ]] && source ~/.claude/retro-deck/shell/load.zsh',
-  files: ['load.zsh', 'frame.sh', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'berlin.py', 'sf.py', 'cologne.py', 'ultipa.py', 'c64.tmux.conf'],
+  files: ['load.zsh', 'frame.sh', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'berlin.py', 'sf.py', 'cologne.py', 'ultipa.py', 'hoiv.py', 'c64.tmux.conf'],
   tmuxHint: 'brew install tmux',
   plugin: 'cc-retro-deck-mac@cc-retro-deck',
 }
