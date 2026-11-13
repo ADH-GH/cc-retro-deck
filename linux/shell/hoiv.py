@@ -70,10 +70,9 @@ def letters():
     x0 += 3 + 2
     v = set()
     for r in range(LET_H):
-        t = (r + 0.5) / LET_H
-        a = t * 5.2
-        for x in range(13):
-            if a - 0.2 <= x < a + 3.2 or 12 - a - 3.2 < x <= 12 - a + 0.2:
+        a = (r + 0.5) / LET_H * 5.0                  # Aussenkante wandert zur Spitze
+        for x in range(13):                           # zwei Schenkel, erst unten vereint
+            if a <= x + 0.5 <= a + 2.8 or 13 - a - 2.8 <= x + 0.5 <= 13 - a:
                 v.add((x0 + x, r))
     out.append(v)
     return out, x0 + 13
