@@ -49,12 +49,12 @@ WORDMARK = 'M396 85.5C411.75 85.5 422.25 77.1562 422.25 64.5938C422.25 55.7812 4
 
 
 def polygons(d):
-    """SVG-Pfad (nur M, C, H, V, Z, absolut) als Liste geschlossener Polygone."""
-    toks = re.findall(r'[MCHVZ]|-?\d*\.?\d+', d)
+    """SVG-Pfad (nur M, L, C, H, V, Z, absolut) als Liste geschlossener Polygone."""
+    toks = re.findall(r'[MLCHVZ]|-?\d*\.?\d+', d)
     polys, cur, x, y, cmd, i = [], [], 0.0, 0.0, None, 0
     while i < len(toks):
         t = toks[i]
-        if t in 'MCHVZ':
+        if t in 'MLCHVZ':
             cmd = t; i += 1
             if cmd == 'Z':
                 if cur:
@@ -64,6 +64,8 @@ def polygons(d):
         if cmd == 'M':
             x, y = float(toks[i]), float(toks[i + 1]); i += 2
             cur = [(x, y)]
+        elif cmd == 'L':
+            x, y = float(toks[i]), float(toks[i + 1]); i += 2; cur.append((x, y))
         elif cmd == 'H':
             x = float(toks[i]); i += 1; cur.append((x, y))
         elif cmd == 'V':

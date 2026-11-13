@@ -16,6 +16,7 @@
 #   LOAD "JAN",8,1          Berlin im neuen n8n-Branding (berlin.py), fuer Jan Oberhauser
 #   LOAD "EDUARDO",8,1      San Francisco im Summer-Games-Stil (sf.py), fuer Eduardo Ordax
 #   LOAD "ROB",8,1          Koeln mit Dom, Bruecke und Feuerwerk (cologne.py), fuer Rob
+#   LOAD "YURI",8,1         Graph-Universum mit Ultipa-Zeichen (ultipa.py), fuer Yuri
 #   RUN                     nur claude, ohne alles
 #   SYS 64738               Reset: Farben und Prompt des Tabs wie vorher
 #
@@ -61,7 +62,7 @@ LOAD() {
   for a in "$@"; do
     up=$(printf %s "$a" | tr '[:lower:]' '[:upper:]')
     case "$up" in
-      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1|ARNO|ARNO,8|ARNO,8,1|JAN|JAN,8|JAN,8,1|EDUARDO|EDUARDO,8|EDUARDO,8,1|ROB|ROB,8|ROB,8,1) disk=${up%%,*}; continue ;;
+      ERIC|ERIC,8|ERIC,8,1|BERTRAND|BERTRAND,8|BERTRAND,8,1|ARNO|ARNO,8|ARNO,8,1|JAN|JAN,8|JAN,8,1|EDUARDO|EDUARDO,8|EDUARDO,8,1|ROB|ROB,8|ROB,8,1|YURI|YURI,8|YURI,8,1) disk=${up%%,*}; continue ;;
     esac
     case "$a" in
       '*,8,1'|'*,8'|'*') ;;                # der C64-Teil, verschluckt
@@ -85,6 +86,7 @@ LOAD() {
       [ "$disk" = JAN ] && intro=berlin.py
       [ "$disk" = EDUARDO ] && intro=sf.py
       [ "$disk" = ROB ] && intro=cologne.py
+      [ "$disk" = YURI ] && intro=ultipa.py
       python3 "$C64_RETRO_DIR/$intro" "$disk" || python3 "$C64_RETRO_DIR/boot.py"
     fi
   fi

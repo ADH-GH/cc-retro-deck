@@ -322,6 +322,8 @@ def main(name, panel_cls=None, motto='n8n AMBASSADOR NYC', accent=N8N, accent2=(
             cursor = '█' if (f // 4) % 2 == 0 else ' '
             out.append(at(pt + len(lines), sl) + LB + SCREEN_BG + (typed + cursor).ljust(text_w - 1) + RESET)
             out.append(paint_cells(panel.frame(f), ct, cl))
+            if hasattr(panel, 'overlay'):                 # echte Schrift ueber dem Bild
+                out.append(panel.overlay(f, ct, cl))
             if f == 0:
                 text = motto
                 out.append(gradient_text(banner_top + 2, sl + text.center(width).index(text), text, accent, accent2, 1.0))
