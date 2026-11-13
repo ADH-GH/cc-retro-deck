@@ -43,7 +43,7 @@ from boot import (at, BOLD, BORDER_BG, BORDER_COLS, CLEAR, CRAB_W, CYCLE, FRAME_
 BAND_ROWS = 3
 BANNER_TOP = BAND_ROWS + 2            # eine Trennzeile zwischen Kopfleiste und Banner
 STALE_S = 90
-VERSION = '0.12.7'                         # mit plugin.json hochzaehlen
+VERSION = '0.12.8'                         # mit plugin.json hochzaehlen
 # Colodore: Rahmenfarbe Hellblau auf ANSI 12, wie load.ps1 sie setzt. Ein Randfeld startet Windows
 # Terminal mit seinem eigenen Farbschema; das Feld setzt sich die Farbe darum selbst.
 LIGHT_BLUE = '70/6d/eb'

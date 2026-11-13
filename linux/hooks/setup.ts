@@ -13,7 +13,7 @@ const EDITION = {
   rc: '.bashrc',
   loader: 'load.bash',
   line: '[ -r ~/.claude/retro-deck/shell/load.bash ] && . ~/.claude/retro-deck/shell/load.bash',
-  files: ['load.bash', 'frame.sh', 'fix.sh', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'berlin.py', 'c64.tmux.conf'],
+  files: ['load.bash', 'frame.sh', 'fix.sh', 'boot.py', 'trek.py', 'nyc.py', 'magenta.py', 'berlin.py', 'sf.py', 'c64.tmux.conf'],
   tmuxHint: 'sudo apt install tmux',
   plugin: 'cc-retro-deck-linux@cc-retro-deck',
 }
